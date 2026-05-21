@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Parcel Pricing Engine</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:#f1f5f9;color:#1e293b;font-size:14px}
+:root{
+  --blue:#2563eb;--darkblue:#1e3a5f;--green:#16a34a;--red:#dc2626;--grey:#6b7280;
+  --green-bg:#dcfce7;--red-bg:#fef2f2;--grey-bg:#f3f4f6;--blue-bg:#eff6ff;
+}
+header{background:var(--darkblue);color:#fff;height:50px;display:flex;align-items:center;padding:0 24px;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.25);gap:32px}
+header .logo{font-weight:800;font-size:16px;letter-spacing:-.3px;white-space:nowrap}
+nav{display:flex;gap:2px}
+nav button{background:none;border:none;color:rgba(255,255,255,.65);cursor:pointer;padding:6px 11px;border-radius:6px;font-size:13px;font-weight:500;white-space:nowrap}
+nav button.active{background:rgba(255,255,255,.15);color:#fff;font-weight:700}
+main{max-width:1400px;margin:0 auto;padding:20px 16px}
+.card{background:#fff;border-radius:10px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:16px}
+h2{font-size:18px;font-weight:700;margin-bottom:4px}
+h3{font-size:15px;font-weight:700;margin-bottom:8px}
+.sub{color:#64748b;font-size:12px;margin-bottom:14px}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+label.field{display:flex;flex-direction:column;font-size:12px;font-weight:600;color:#475569;gap:3px}
+label.field .hint{font-weight:400;color:#94a3b8;font-size:11px}
+input[type=text],input[type=number],select,textarea{padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:14px;width:100%;outline:none;transition:border .15s}
+input:focus,select:focus,textarea:focus{border-color:var(--blue)}
+input[type=range]{width:100%;accent-color:var(--blue)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border:none;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;transition:opacity .15s}
+.btn:hover{opacity:.9}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-green{background:var(--green);color:#fff}
+.btn-purple{background:#7c3aed;color:#fff}
+.btn-red{background:var(--red);color:#fff}
+.btn-ghost{background:#f1f5f9;color:#374151;border:1px solid #e2e8f0}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.alert{padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:8px}
+.alert-green{background:var(--green-bg);color:#166534;border:1px solid #bbf7d0}
+.alert-red{background:var(--red-bg);color:#991b1b;border:1px solid #fecaca}
+.alert-blue{background:var(--blue-bg);color:#1e40af;border:1px solid #bfdbfe}
+.alert-yellow{background:#fefce8;color:#854d0e;border:1px solid #fef08a}
+.tag{display:inline-block;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:600}
+.tag-green{background:var(--green-bg);color:#15803d}
+.tag-blue{background:var(--blue-bg);color:#1d4ed8}
+.tag-grey{background:var(--grey-bg);color:#374151}
+.tag-red{background:var(--red-bg);color:var(--red)}
+.tag-yellow{background:#fefce8;color:#854d0e}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:var(--darkblue);color:#fff;padding:6px 8px;text-align:center;white-space:nowrap;font-weight:600}
+th.left{text-align:left}
+td{padding:4px 8px;border-bottom:1px solid #f1f5f9;white-space:nowrap}
+td.right{text-align:right}
+td.center{text-align:center}
+tr:hover{background:#fafafa}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px}
+.stat-label{font-size:10px;color:#94a3b8;margin-bottom:2px;text-transform:uppercase;letter-spacing:.5px}
+.stat-val{font-size:16px;font-weight:800;color:#1e293b}
+.stat-val.green{color:var(--green)}
+.stat-val.blue{color:var(--blue)}
+.stat-val.red{color:var(--red)}
+.stat-val.yellow{color:#d97706}
+.pill-bar{height:18px;border-radius:9px;overflow:hidden;display:flex;background:#f1f5f9;margin:8px 0}
+.pill-seg{height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.legend-item{display:flex;align-items:center;gap:4px;font-size:12px;padding:3px 9px;border-radius:6px}
+.dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.tabs-inner{display:flex;gap:4px;margin-bottom:12px;border-bottom:2px solid #e2e8f0;padding-bottom:0}
+.tab-btn{background:none;border:none;padding:7px 14px;cursor:pointer;font-size:13px;border-bottom:2px solid transparent;margin-bottom:-2px;color:#64748b;font-weight:500}
+.tab-btn.active{border-bottom-color:var(--blue);color:var(--blue);font-weight:700}
+.table-wrap{overflow-x:auto;border-radius:8px;border:1px solid #e2e8f0}
+.pkg-green{background:var(--green-bg)}
+.pkg-grey{background:var(--grey-bg)}
+.pkg-red{background:var(--red-bg)}
+.pkg-correction{background:#fefce8}
+.pkg-no_rate{background:#f5f3ff}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:200}
+.modal{background:#fff;border-radius:12px;padding:22px;width:440px;max-width:95vw;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.modal-hdr h3{font-size:15px}
+.close-btn{background:none;border:none;font-size:18px;cursor:pointer;color:#94a3b8}
+.audit-row td{padding:3px 0;font-size:13px}
+.audit-row td:last-child{text-align:right;font-weight:600}
+.audit-section{border-top:1px solid #f1f5f9;padding-top:6px;margin-top:6px}
+.grid-cell{padding:3px 7px;text-align:right;border-bottom:1px solid #f1f5f9;cursor:pointer;white-space:nowrap}
+.grid-cell:hover{background:#dbeafe}
+.grid-cell.green-cell{background:var(--green-bg);color:#166534}
+.grid-cell.blue-cell{background:var(--blue-bg);color:#1e40af}
+.grid-cell.none-cell{color:#cbd5e1;text-align:center}
+.weight-cell{background:#f8fafc;font-weight:600;text-align:center;border-bottom:1px solid #f1f5f9;font-size:11px}
+.section-sep{height:16px}
+.empty{color:#94a3b8;font-style:italic;padding:20px;text-align:center}
+.scenario-card{border:1px solid #e2e8f0;border-radius:8px;padding:12px;background:#fff;position:relative}
+.scenario-card.selected{border:2px solid var(--blue);background:var(--blue-bg)}
+.compare-best{background:var(--green-bg);color:var(--green);font-weight:700}
+#toast{position:fixed;bottom:20px;right:20px;background:#1e293b;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none}
+#toast.show{opacity:1}
+.file-drop{border:2px dashed #cbd5e1;border-radius:8px;padding:20px;text-align:center;color:#64748b;cursor:pointer;transition:all .2s}
+.file-drop:hover,.file-drop.drag{border-color:var(--blue);background:var(--blue-bg);color:var(--blue)}
+.upload-row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px}
+.rc-card{border:1px solid #e2e8f0;border-radius:8px;padding:12px;background:#f8fafc;margin-bottom:8px}
+.rc-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.rc-name{font-weight:700;font-size:13px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Parcel Pricing Engine</div>
+  <nav id="main-nav">
+    <button class="active" data-tab="setup">Setup</button>
+    <button data-tab="engine">Pricing Engine</button>
+    <button data-tab="grid">Rate Grids</button>
+    <button data-tab="packages">Package Detail</button>
+    <button data-tab="export">Export</button>
+    <button data-tab="scenarios">Scenarios</button>
+  </nav>
+</header>
+
+<main>
+  <!-- SETUP TAB -->
+  <div id="tab-setup">
+    <div class="two-col">
+      <div class="card">
+        <h2>Rate Cards</h2>
+        <p class="sub">Upload carrier rate Excel/CSV files, or load the built-in sample.</p>
+        <div class="alert alert-blue" style="margin-bottom:12px">
+          <strong>CSV format:</strong> Row 1 = headers (weight, zone2, zone3…zone8). One sheet per service.<br>
+          Or click <strong>Load Sample Data</strong> to start immediately.
+        </div>
+        <div class="upload-row">
+          <div style="flex:1;min-width:160px">
+            <label class="field">Card Name
+              <input type="text" id="rc-name" placeholder="e.g. OctoChem UPS 2025">
+            </label>
+          </div>
+          <div style="flex:1;min-width:160px">
+            <label class="field">Service Type
+              <select id="rc-service">
+                <option value="ground_commercial">Ground Commercial</option>
+                <option value="ground_residential">Ground Residential</option>
+                <option value="2da">2nd Day Air</option>
+                <option value="nda">Next Day Air</option>
+              </select>
+            </label>
+          </div>
+          <div>
+            <label class="field">&nbsp;
+              <button class="btn btn-primary" onclick="triggerRCUpload()">Upload CSV</button>
+            </label>
+          </div>
+        </div>
+        <input type="file" id="rc-file-input" accept=".csv,.xlsx" style="display:none" onchange="handleRCUpload(this)">
+        <button class="btn btn-green" onclick="loadSampleData()" style="margin-bottom:12px">⚡ Load Sample Data</button>
+        <div id="rc-list"></div>
+      </div>
+
+      <div class="card">
+        <h2>Customer Invoice</h2>
+        <p class="sub">Upload invoice CSV or load built-in sample. Auto-detects weight, zone, service, charges.</p>
+        <div class="upload-row">
+          <div style="flex:1;min-width:160px">
+            <label class="field">Invoice Name
+              <input type="text" id="inv-name" placeholder="e.g. ABC Corp Jan 2025">
+            </label>
+          </div>
+          <div>
+            <label class="field">&nbsp;
+              <button class="btn btn-primary" onclick="triggerInvUpload()">Upload CSV</button>
+            </label>
+          </div>
+        </div>
+        <input type="file" id="inv-file-input" accept=".csv" style="display:none" onchange="handleInvUpload(this)">
+        <div id="inv-status"></div>
+        <div id="inv-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ENGINE TAB -->
+  <div id="tab-engine" style="display:none">
+    <div class="two-col">
+      <div>
+        <div class="card">
+          <h3>Fuel Configuration</h3>
+          <div class="three-col" style="gap:12px;margin-bottom:12px">
+            <label class="field">Our Fuel %
+              <span class="hint">What we pay carrier</span>
+              <input type="number" id="our-fuel" value="12.8" step="0.1" min="0" max="50" oninput="updateFuelSpread()">
+            </label>
+            <label class="field">Published Fuel %
+              <span class="hint">Carrier published rate</span>
+              <input type="number" id="pub-fuel" value="17.1" step="0.1" min="0" max="50" oninput="updateFuelSpread()">
+            </label>
+            <label class="field">Customer Fuel %
+              <span class="hint">What we bill customer</span>
+              <input type="number" id="cust-fuel" value="17.1" step="0.1" min="0" max="50" oninput="updateFuelSpread()">
+            </label>
+          </div>
+          <div class="alert alert-blue" id="fuel-spread-display">Fuel spread: 4.3% on every $1 of sell base</div>
+        </div>
+
+        <div class="card">
+          <h3>Volume &amp; Settings</h3>
+          <div class="two-col" style="gap:12px;margin-bottom:12px">
+            <label class="field">Volume Multiplier
+              <span class="hint">Scale invoice to monthly</span>
+              <input type="number" id="vol-mult" value="1.0" step="0.1" min="0.1">
+            </label>
+            <label class="field">Scenario Name
+              <input type="text" id="scenario-name" placeholder="e.g. ABC Corp v1 — 5%">
+            </label>
+          </div>
+          <h3 style="margin-top:8px">Rate Cards to Use</h3>
+          <div id="rc-checkboxes" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+        </div>
+
+        <div class="card">
+          <h3>Accessorial Configuration</h3>
+          <table>
+            <thead><tr>
+              <th class="left">Accessorial</th>
+              <th>Mode</th>
+              <th>Our Rate</th>
+              <th>Customer Rate</th>
+            </tr></thead>
+            <tbody id="acc-config-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h3>Markup Engine</h3>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <span style="font-size:13px;font-weight:600;min-width:70px">Markup: <span id="markup-display" style="color:var(--blue)">5.0%</span></span>
+            <input type="range" id="markup-slider" min="0" max="15" step="0.5" value="5" oninput="onMarkupSlider()" style="flex:1">
+            <input type="number" id="markup-num" value="5" min="0" max="15" step="0.1" style="width:65px" oninput="onMarkupNum()">
+          </div>
+
+          <div id="summary-stats" class="stat-grid" style="margin-bottom:14px">
+            <div class="stat"><div class="stat-label">Packages</div><div class="stat-val" id="st-pkgs">—</div></div>
+            <div class="stat"><div class="stat-label">Customer/Mo</div><div class="stat-val" id="st-cust">—</div></div>
+            <div class="stat"><div class="stat-label">Our Sell/Mo</div><div class="stat-val" id="st-sell">—</div></div>
+            <div class="stat"><div class="stat-label">Our Cost/Mo</div><div class="stat-val" id="st-cost">—</div></div>
+            <div class="stat"><div class="stat-label">Cust Savings/Mo</div><div class="stat-val green" id="st-savings">—</div></div>
+            <div class="stat"><div class="stat-label">Margin/Mo</div><div class="stat-val blue" id="st-margin">—</div></div>
+            <div class="stat"><div class="stat-label">Margin %</div><div class="stat-val blue" id="st-marginpct">—</div></div>
+            <div class="stat"><div class="stat-label">Corrections Out</div><div class="stat-val yellow" id="st-corrections">—</div></div>
+          </div>
+
+          <div class="pill-bar" id="status-bar"></div>
+          <div class="legend" id="status-legend"></div>
+
+          <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+            <button class="btn btn-green" id="run-btn" onclick="runScenario()" style="font-size:14px;padding:10px 20px">▶ Run / Refresh</button>
+            <button class="btn btn-ghost" onclick="saveScenario()">Save Scenario</button>
+          </div>
+          <div id="run-error" style="margin-top:8px"></div>
+          <div id="run-status" style="margin-top:6px;font-size:12px;color:#64748b"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RATE GRIDS TAB -->
+  <div id="tab-grid" style="display:none">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+        <h2 style="margin:0">Rate Source Maps</h2>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <div class="tabs-inner" style="margin:0;border:none">
+            <button class="tab-btn active" onclick="setGridService('ground_commercial',this)">Ground Comm.</button>
+            <button class="tab-btn" onclick="setGridService('ground_residential',this)">Ground Res.</button>
+            <button class="tab-btn" onclick="setGridService('2da',this)">2DA</button>
+            <button class="tab-btn" onclick="setGridService('nda',this)">NDA</button>
+          </div>
+          <div class="tabs-inner" style="margin:0;border:none">
+            <button class="tab-btn active" onclick="setGridView('sell',this)">Sell Base</button>
+            <button class="tab-btn" onclick="setGridView('cost',this)">Our Cost</button>
+            <button class="tab-btn" onclick="setGridView('raw',this)">Raw Rate</button>
+            <button class="tab-btn" onclick="setGridView('carrier',this)">Carrier</button>
+          </div>
+        </div>
+      </div>
+      <div id="grid-hint" class="sub"></div>
+      <div id="grid-container" class="table-wrap"></div>
+    </div>
+  </div>
+
+  <!-- PACKAGES TAB -->
+  <div id="tab-packages" style="display:none">
+    <div class="card">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <h2 style="margin:0">Package Detail</h2>
+        <div style="display:flex;gap:4px;flex-wrap:wrap" id="pkg-filters"></div>
+        <input type="text" id="pkg-search" placeholder="Search tracking / ref…" style="max-width:200px" oninput="filterPackages()">
+        <div style="flex:1"></div>
+        <span id="pkg-count-display" style="font-size:12px;color:#64748b"></span>
+      </div>
+      <div id="pkg-totals" class="alert alert-blue" style="margin-bottom:8px;display:none"></div>
+      <div id="pkg-table-wrap" class="table-wrap"></div>
+      <div id="pkg-pagination" style="display:flex;gap:4px;justify-content:center;margin-top:8px"></div>
+    </div>
+  </div>
+
+  <!-- EXPORT TAB -->
+  <div id="tab-export" style="display:none">
+    <div class="card">
+      <h2>Export Proposals</h2>
+      <p class="sub">Generate customer-facing or internal documents.</p>
+      <div class="two-col" style="gap:12px;margin-bottom:12px">
+        <label class="field">Proposal / Scenario Name
+          <input type="text" id="exp-scenario" placeholder="e.g. ABC Corp v2 — 5% markup">
+        </label>
+        <label class="field">Account Name (Deal Brief)
+          <input type="text" id="exp-account" placeholder="e.g. ABC Corp">
+        </label>
+      </div>
+      <label class="field" style="margin-bottom:10px">Strategy Notes (optional)
+        <textarea id="exp-strategy" rows="2" placeholder="Key context for the deal brief…" style="resize:vertical"></textarea>
+      </label>
+      <div id="exp-error" style="margin-bottom:8px"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-green" onclick="exportCSV('customer')" style="flex:1;min-width:180px;padding:14px;flex-direction:column;align-items:flex-start;height:auto">
+          <div style="font-size:14px;font-weight:700;margin-bottom:4px">Customer CSV</div>
+          <div style="font-size:11px;opacity:.85">Package comparison + rate grids</div>
+        </button>
+        <button class="btn btn-primary" onclick="exportCSV('internal')" style="flex:1;min-width:180px;padding:14px;flex-direction:column;align-items:flex-start;height:auto">
+          <div style="font-size:14px;font-weight:700;margin-bottom:4px">Internal CSV</div>
+          <div style="font-size:11px;opacity:.85">Exec summary + cost/sell/margin grids + pkg P&L</div>
+        </button>
+        <button class="btn btn-purple" onclick="exportCSV('brief')" style="flex:1;min-width:180px;padding:14px;flex-direction:column;align-items:flex-start;height:auto">
+          <div style="font-size:14px;font-weight:700;margin-bottom:4px">Deal Brief (TXT)</div>
+          <div style="font-size:11px;opacity:.85">Economics, pitch script, billing workflow</div>
+        </button>
+      </div>
+      <div class="alert alert-yellow" style="margin-top:12px">
+        CSV exports open directly in Excel. For full color-formatted Excel + Word exports, run the Python backend.
+      </div>
+    </div>
+  </div>
+
+  <!-- SCENARIOS TAB -->
+  <div id="tab-scenarios" style="display:none">
+    <div class="card">
+      <h2>Scenario Comparison</h2>
+      <p class="sub">Check scenarios to compare side by side.</p>
+      <div id="scenario-cards" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px"></div>
+      <div id="scenario-compare"></div>
+    </div>
+  </div>
+</main>
+
+<!-- AUDIT MODAL -->
+<div id="audit-modal" class="modal-overlay" style="display:none" onclick="closeAudit(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-hdr">
+      <h3>Package Audit Trail</h3>
+      <button class="close-btn" onclick="document.getElementById('audit-modal').style.display='none'">✕</button>
+    </div>
+    <div id="audit-tracking" style="font-size:12px;color:#64748b;margin-bottom:10px"></div>
+    <table><tbody id="audit-body"></tbody></table>
+    <div id="audit-formula" class="alert alert-blue" style="margin-top:12px;font-size:11px;line-height:1.6"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── STATE ────────────────────────────────────────────────────────────────────
+const state = {
+  rateCards: [],    // [{id, name, serviceType, rates:{w:{z:rate}}}]
+  invoice: null,    // {name, packages:[...]}
+  result: null,     // {summary, packages, rateSourceMaps}
+  scenarios: [],    // saved scenarios
+  gridService: 'ground_commercial',
+  gridView: 'sell',
+  pkgFilter: 'all',
+  pkgPage: 0,
+  selectedCardIds: new Set(),
+  accConfig: {},    // {das:{passthrough,our_rate,cust_rate},...}
+};
+const PKG_PAGE_SIZE = 100;
+const ZONES = [2,3,4,5,6,7,8];
+const SERVICES = ['ground_commercial','ground_residential','2da','nda'];
+const SVC_LABELS = {ground_commercial:'Ground Comm.',ground_residential:'Ground Res.','2da':'2DA',nda:'NDA'};
+const ACC_TYPES = [
+  {key:'das',label:'DAS'},
+  {key:'das_extended',label:'DAS Extended'},
+  {key:'residential',label:'Residential'},
+  {key:'address_correction',label:'Address Correction'},
+  {key:'additional_handling',label:'Add. Handling'},
+];
+
+// ── SAMPLE DATA ──────────────────────────────────────────────────────────────
+function buildSampleRateCard() {
+  // Realistic UPS-style ground commercial rates
+  const base = {
+    2:[8.73,8.90,9.07,9.25,9.43,9.62,9.82,10.03,10.24,10.46,11.52,12.67,13.92,15.31,16.84,18.53,20.38,22.42,24.66,27.13,29.44,31.95,34.66,37.62,40.82,44.28,48.04,52.14,56.58,61.41],
+    3:[9.48,9.65,9.83,10.01,10.20,10.39,10.59,10.80,11.01,11.23,12.35,13.59,14.95,16.44,18.09,19.89,21.88,24.07,26.47,29.12,31.59,34.27,37.18,40.35,43.78,47.50,51.54,55.92,60.67,65.83],
+    4:[9.73,10.38,10.65,10.93,11.22,11.52,11.83,12.15,12.47,12.81,14.09,15.50,17.05,18.75,20.63,22.69,24.96,27.45,30.20,33.22,36.05,39.11,42.45,46.07,49.99,54.24,58.85,63.86,69.28,75.18],
+    5:[10.18,11.06,11.49,11.94,12.40,12.88,13.38,13.90,14.44,15.00,16.50,18.15,19.97,21.96,24.16,26.57,29.23,32.15,35.36,38.90,42.22,45.80,49.68,53.90,58.49,63.48,68.88,74.72,81.07,87.96],
+    6:[10.62,11.67,12.25,12.87,13.52,14.20,14.92,15.67,16.46,17.29,19.02,20.92,23.01,25.31,27.84,30.63,33.69,37.06,40.76,44.84,48.68,52.82,57.31,62.17,67.45,73.18,79.39,86.13,93.43,101.36],
+    7:[11.17,12.47,13.47,14.57,15.75,17.03,18.42,19.91,21.52,23.25,25.58,28.13,30.94,34.03,37.44,41.18,45.30,49.83,54.81,60.30,65.42,70.98,76.98,83.50,90.56,98.22,106.54,115.57,125.36,135.97],
+    8:[12.71,14.34,16.34,18.28,20.47,22.93,25.68,28.76,32.21,36.07,39.67,43.64,48.01,52.81,58.09,63.90,70.29,77.32,85.05,93.56,101.51,110.14,119.45,129.55,140.50,152.44,165.40,179.46,194.68,211.16],
+  };
+  const rates = {};
+  for (let w = 1; w <= 30; w++) {
+    rates[w] = {};
+    for (const z of ZONES) {
+      rates[w][z] = base[z][w-1];
+    }
+  }
+  return rates;
+}
+
+function buildSampleRateCard2() {
+  // A slightly different carrier (Channel Rate) - 3-8% higher on zones 2-4, cheaper on 5-8
+  const r1 = buildSampleRateCard();
+  const rates = {};
+  for (let w = 1; w <= 30; w++) {
+    rates[w] = {};
+    for (const z of ZONES) {
+      let mult = z <= 4 ? 1.04 : 0.97;
+      rates[w][z] = +(r1[w][z] * mult).toFixed(2);
+    }
+  }
+  return rates;
+}
+
+function buildSampleInvoice() {
+  const packages = [];
+  const services = ['ground_commercial','ground_commercial','ground_commercial','ground_residential','ground_residential','2da','nda'];
+  const svcWeights = {ground_commercial:[1,5,10,15,20,25,30,3,7,12],ground_residential:[2,4,8,14,18],
+    '2da':[1,3,5,8],'nda':[1,2,4]};
+  const r1 = buildSampleRateCard();
+  const dasCosts = {3:0,4:0,5:0,6:3.50,7:4.50,8:5.00};
+  const resCosts = {2:4.95,3:4.95,4:4.95,5:4.95,6:4.95,7:4.95,8:4.95};
+  const fuelPct = 0.175; // 17.5% - what carrier charged
+
+  for (let i = 0; i < 120; i++) {
+    const svc = services[i % services.length];
+    const weights = svcWeights[svc];
+    const w = weights[i % weights.length];
+    const z = 2 + (i % 7);
+    const base = (r1[Math.min(w,30)]?.[z] || 15) * (1 + (Math.random()-.3)*0.05);
+    const fuel = +(base * fuelPct).toFixed(2);
+    const das = z >= 6 && svc.includes('ground') ? dasCosts[z] || 0 : 0;
+    const res = svc === 'ground_residential' ? resCosts[z] || 0 : 0;
+    const correction = i === 23 || i === 67; // flag 2 corrections
+    const total = +(base + fuel + das + res).toFixed(2);
+    packages.push({
+      tracking:`1Z${String(i).padStart(6,'0')}`,
+      reference:`REF-${String(i+1000).padStart(4,'0')}`,
+      weight:w, zone:z, service:svc,
+      base_charge:+base.toFixed(2), fuel_surcharge:fuel,
+      das_charge:das, das_extended:0, residential_charge:res,
+      address_correction:0, additional_handling:0, declared_value:0,
+      total_charge:total, correction_flag:correction,
+      origin_zip:'10001', dest_zip:'',
+    });
+  }
+  return packages;
+}
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('#main-nav button').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+  initAccConfig();
+  renderRCList();
+  updateFuelSpread();
+});
+
+function switchTab(id) {
+  document.querySelectorAll('#main-nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
+  ['setup','engine','grid','packages','export','scenarios'].forEach(t => {
+    document.getElementById(`tab-${t}`).style.display = t === id ? '' : 'none';
+  });
+  if (id === 'grid') renderGrid();
+  if (id === 'packages') renderPackageTable();
+  if (id === 'scenarios') renderScenarios();
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ── SAMPLE DATA ──────────────────────────────────────────────────────────────
+function loadSampleData() {
+  state.rateCards = [
+    {id:1, name:'OctoChem UPS', serviceType:'ground_commercial', rates:buildSampleRateCard()},
+    {id:2, name:'Channel Rate 2025', serviceType:'ground_commercial', rates:buildSampleRateCard2()},
+  ];
+  state.selectedCardIds = new Set([1, 2]);
+  state.invoice = {name:'ABC Corp Sample Invoice', packages:buildSampleInvoice()};
+  renderRCList();
+  renderRCCheckboxes();
+  renderInvStatus();
+  toast('Sample data loaded — switch to Pricing Engine and click Run');
+}
+
+// ── RATE CARD UPLOAD ─────────────────────────────────────────────────────────
+function triggerRCUpload() { document.getElementById('rc-file-input').click(); }
+
+function handleRCUpload(input) {
+  const file = input.files[0];
+  const name = document.getElementById('rc-name').value.trim();
+  const svc = document.getElementById('rc-service').value;
+  if (!file || !name) { alert('Enter a name first'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const rates = parseRateCSV(e.target.result);
+      if (Object.keys(rates).length === 0) { alert('No valid rates found. Check format.'); return; }
+      const id = Date.now();
+      state.rateCards.push({id, name, serviceType:svc, rates});
+      state.selectedCardIds.add(id);
+      renderRCList();
+      renderRCCheckboxes();
+      toast(`Loaded ${Object.keys(rates).length} weight rows`);
+      document.getElementById('rc-name').value = '';
+    } catch(err) { alert('Parse error: ' + err.message); }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+function parseRateCSV(text) {
+  const lines = text.trim().split('\n').map(l => l.split(',').map(c => c.trim().replace(/"/g,'')));
+  if (lines.length < 2) throw new Error('File too short');
+  // Detect zone columns from header
+  const header = lines[0];
+  const zoneMap = {}; // colIndex -> zone number
+  header.forEach((h, i) => {
+    const m = h.match(/(\d+)/);
+    if (m) { const z = parseInt(m[1]); if (z>=2 && z<=8) zoneMap[i] = z; }
+  });
+  const rates = {};
+  for (let r = 1; r < lines.length; r++) {
+    const row = lines[r];
+    if (!row[0]) continue;
+    const w = parseInt(row[0]);
+    if (isNaN(w) || w<1 || w>150) continue;
+    rates[w] = {};
+    Object.entries(zoneMap).forEach(([ci, z]) => {
+      const v = parseFloat(row[ci]);
+      if (!isNaN(v) && v > 0) rates[w][z] = v;
+    });
+  }
+  return rates;
+}
+
+function renderRCList() {
+  const el = document.getElementById('rc-list');
+  if (state.rateCards.length === 0) { el.innerHTML = '<p class="empty">No rate cards yet.</p>'; return; }
+  const groups = {};
+  state.rateCards.forEach(c => { (groups[c.name] = groups[c.name]||[]).push(c); });
+  el.innerHTML = Object.entries(groups).map(([name, cards]) => `
+    <div class="rc-card">
+      <div class="rc-header">
+        <span class="rc-name">${name}</span>
+        <button class="btn btn-ghost" style="padding:3px 8px;font-size:11px" onclick="deleteRC('${name}')">Delete</button>
+      </div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">
+        ${cards.map(c => `<span class="tag tag-blue">${SVC_LABELS[c.serviceType]||c.serviceType} (${Object.keys(c.rates).length} wts)</span>`).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function deleteRC(name) {
+  state.rateCards = state.rateCards.filter(c => c.name !== name);
+  renderRCList(); renderRCCheckboxes();
+}
+
+function renderRCCheckboxes() {
+  const el = document.getElementById('rc-checkboxes');
+  const groups = {};
+  state.rateCards.forEach(c => { (groups[c.name] = groups[c.name]||[]).push(c); });
+  if (Object.keys(groups).length === 0) {
+    el.innerHTML = '<span style="color:#94a3b8;font-size:12px;font-style:italic">No rate cards — upload in Setup tab.</span>';
+    return;
+  }
+  el.innerHTML = Object.entries(groups).map(([name, cards]) => {
+    const ids = cards.map(c => c.id);
+    const checked = ids.every(id => state.selectedCardIds.has(id));
+    return `<label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">
+      <input type="checkbox" ${checked?'checked':''} onchange="toggleRCGroup('${name}',this.checked)"> ${name}
+    </label>`;
+  }).join('');
+}
+
+function toggleRCGroup(name, checked) {
+  state.rateCards.filter(c => c.name === name).forEach(c => {
+    if (checked) state.selectedCardIds.add(c.id);
+    else state.selectedCardIds.delete(c.id);
+  });
+}
+
+// ── INVOICE UPLOAD ───────────────────────────────────────────────────────────
+function triggerInvUpload() { document.getElementById('inv-file-input').click(); }
+
+function handleInvUpload(input) {
+  const file = input.files[0];
+  const name = document.getElementById('inv-name').value.trim() || file.name;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const packages = parseInvoiceCSV(e.target.result);
+      if (packages.length === 0) { alert('No packages found.'); return; }
+      state.invoice = {name, packages};
+      renderInvStatus();
+      toast(`Loaded ${packages.length} packages`);
+    } catch(err) { alert('Parse error: ' + err.message); }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+const COL_ALIASES = {
+  weight:['weight','billed weight','billable weight','wgt','pkg weight'],
+  zone:['zone','delivery zone','ship zone','rate zone'],
+  service:['service','service type','service level','svc'],
+  base_charge:['transportation charge','base charge','base freight','freight charge','net charge'],
+  fuel_surcharge:['fuel surcharge','fuel','fuel surchg','fuel s/c'],
+  das_charge:['delivery area surcharge','das','das charge'],
+  residential_charge:['residential','residential delivery'],
+  total_charge:['total charge','net amount','total','invoice amount'],
+  tracking:['tracking number','tracking #','tracking no','shipment id'],
+};
+
+function parseInvoiceCSV(text) {
+  const lines = text.trim().split('\n').map(l => l.split(',').map(c => c.trim().replace(/"/g,'')));
+  if (lines.length < 2) return [];
+  const rawHeader = lines[0];
+  const header = rawHeader.map(h => h.toLowerCase().replace(/[^a-z0-9 ]/g,' ').trim());
+
+  function findCol(field) {
+    const aliases = COL_ALIASES[field] || [];
+    for (const alias of aliases) {
+      const idx = header.findIndex(h => h === alias || h.includes(alias) || alias.includes(h));
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  }
+
+  const cols = {};
+  Object.keys(COL_ALIASES).forEach(f => { cols[f] = findCol(f); });
+
+  const SVC_MAP = {
+    'ground':'ground_commercial','ups ground':'ground_commercial','ground commercial':'ground_commercial',
+    'ground residential':'ground_residential','home delivery':'ground_residential',
+    '2 day':'2da','2nd day':'2da','2nd day air':'2da','2 day air':'2da',
+    'next day':'nda','next day air':'nda','overnight':'nda',
+  };
+
+  const packages = [];
+  for (let r = 1; r < lines.length; r++) {
+    const row = lines[r];
+    const g = (f) => cols[f] !== -1 ? row[cols[f]] : '';
+    const num = (f) => { const v = parseFloat((g(f)||'').replace(/[$,]/g,'')); return isNaN(v)?0:v; };
+
+    const base = num('base_charge');
+    if (!base) continue;
+    const rawSvc = (g('service')||'').toLowerCase().trim();
+    let svc = 'ground_commercial';
+    for (const [k,v] of Object.entries(SVC_MAP)) { if (rawSvc.includes(k)) { svc=v; break; } }
+
+    const z = parseInt(g('zone'));
+    packages.push({
+      tracking:g('tracking')||`#${r}`, reference:'',
+      weight:Math.max(1,parseFloat(g('weight'))||1),
+      zone:(z>=2&&z<=8)?z:null, service:svc,
+      base_charge:base, fuel_surcharge:num('fuel_surcharge'),
+      das_charge:num('das_charge'), das_extended:0,
+      residential_charge:num('residential_charge'),
+      address_correction:0, additional_handling:0, declared_value:0,
+      total_charge:num('total_charge')||base+num('fuel_surcharge')+num('das_charge'),
+      correction_flag:false,
+    });
+  }
+  return packages;
+}
+
+function renderInvStatus() {
+  const inv = state.invoice;
+  if (!inv) { document.getElementById('inv-list').innerHTML=''; document.getElementById('inv-status').innerHTML=''; return; }
+  const active = inv.packages.filter(p=>!p.correction_flag);
+  const corrections = inv.packages.length - active.length;
+  const svcCounts = {};
+  active.forEach(p => { svcCounts[p.service] = (svcCounts[p.service]||0)+1; });
+  document.getElementById('inv-status').innerHTML = `
+    <div class="alert alert-green">
+      <strong>${inv.name}</strong> — ${inv.packages.length.toLocaleString()} packages
+      ${corrections>0?`<span style="color:#d97706"> · ${corrections} corrections flagged</span>`:''}
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">
+        ${Object.entries(svcCounts).map(([s,n])=>`<span class="tag tag-blue">${SVC_LABELS[s]||s}: ${n}</span>`).join('')}
+      </div>
+    </div>
+  `;
+  renderRCCheckboxes();
+}
+
+// ── ACCESSORIALS ─────────────────────────────────────────────────────────────
+function initAccConfig() {
+  ACC_TYPES.forEach(({key}) => {
+    state.accConfig[key] = {passthrough:true, our_rate:'', cust_rate:''};
+  });
+  renderAccConfig();
+}
+
+function renderAccConfig() {
+  const tbody = document.getElementById('acc-config-body');
+  tbody.innerHTML = ACC_TYPES.map(({key,label}) => {
+    const ac = state.accConfig[key];
+    return `<tr>
+      <td>${label}</td>
+      <td class="center">
+        <label style="margin-right:8px"><input type="radio" name="acc-${key}" value="pass" ${ac.passthrough!==false?'checked':''} onchange="setAccMode('${key}','pass')"> Pass</label>
+        <label><input type="radio" name="acc-${key}" value="custom" ${ac.passthrough===false?'checked':''} onchange="setAccMode('${key}','custom')"> Custom</label>
+      </td>
+      <td><input type="number" step="0.01" min="0" value="${ac.our_rate||''}" ${ac.passthrough!==false?'disabled':''} style="width:80px" placeholder="4.50" id="acc-our-${key}" oninput="state.accConfig['${key}'].our_rate=parseFloat(this.value)||0"></td>
+      <td><input type="number" step="0.01" min="0" value="${ac.cust_rate||''}" ${ac.passthrough!==false?'disabled':''} style="width:80px" placeholder="5.00" id="acc-cust-${key}" oninput="state.accConfig['${key}'].cust_rate=parseFloat(this.value)||0"></td>
+    </tr>`;
+  }).join('');
+}
+
+function setAccMode(key, mode) {
+  state.accConfig[key].passthrough = mode === 'pass';
+  renderAccConfig();
+}
+
+// ── FUEL SPREAD ──────────────────────────────────────────────────────────────
+function updateFuelSpread() {
+  const our = parseFloat(document.getElementById('our-fuel').value) || 0;
+  const cust = parseFloat(document.getElementById('cust-fuel').value) || 0;
+  const spread = (cust - our).toFixed(1);
+  document.getElementById('fuel-spread-display').textContent =
+    `Fuel spread: ${spread}% on every $1 of sell base  |  Our cost = base × (1+${our}%)  |  Sell fuel = sell base × ${cust}%`;
+}
+
+// ── MARKUP ───────────────────────────────────────────────────────────────────
+let markupDebounce = null;
+function onMarkupSlider() {
+  const v = parseFloat(document.getElementById('markup-slider').value);
+  document.getElementById('markup-num').value = v;
+  document.getElementById('markup-display').textContent = v.toFixed(1)+'%';
+  clearTimeout(markupDebounce);
+  markupDebounce = setTimeout(() => { if (state.result) runScenario(); }, 500);
+}
+function onMarkupNum() {
+  const v = parseFloat(document.getElementById('markup-num').value) || 0;
+  document.getElementById('markup-slider').value = Math.min(15, v);
+  document.getElementById('markup-display').textContent = v.toFixed(1)+'%';
+  clearTimeout(markupDebounce);
+  markupDebounce = setTimeout(() => { if (state.result) runScenario(); }, 500);
+}
+
+// ── RATE ENGINE ──────────────────────────────────────────────────────────────
+function getRate(rates, weight, zone) {
+  const weights = Object.keys(rates).map(Number).sort((a,b)=>a-b);
+  for (const w of weights) {
+    if (w >= weight) {
+      const r = rates[w][zone] || rates[w][String(zone)];
+      if (r != null) return r;
+    }
+  }
+  return null;
+}
+
+function buildRSM(service) {
+  const cards = state.rateCards.filter(c => c.serviceType === service && state.selectedCardIds.has(c.id));
+  if (cards.length === 0) return {};
+  const rsm = {};
+  // Get all weights from all cards
+  const allWeights = new Set();
+  cards.forEach(c => Object.keys(c.rates).forEach(w => allWeights.add(parseInt(w))));
+  const weights = [...allWeights].sort((a,b)=>a-b);
+
+  for (const w of weights) {
+    rsm[w] = {};
+    for (const z of ZONES) {
+      let bestRate = null, bestCarrier = null;
+      for (const card of cards) {
+        const r = getRate(card.rates, w, z);
+        if (r != null && (bestRate === null || r < bestRate)) {
+          bestRate = r; bestCarrier = card.name;
+        }
+      }
+      if (bestRate !== null) rsm[w][z] = {rate:bestRate, carrier:bestCarrier};
+    }
+  }
+  return rsm;
+}
+
+function accCost(pkg, side) {
+  let total = 0;
+  const map = {das:'das_charge',das_extended:'das_extended',residential:'residential_charge',
+    address_correction:'address_correction',additional_handling:'additional_handling'};
+  for (const [key, field] of Object.entries(map)) {
+    const amt = pkg[field] || 0;
+    if (!amt) continue;
+    const ac = state.accConfig[key];
+    if (!ac || ac.passthrough !== false) { total += amt; continue; }
+    if (side === 'cost') total += ac.our_rate || amt;
+    else total += ac.cust_rate || amt;
+  }
+  total += pkg.declared_value || 0;
+  return total;
+}
+
+function pricePackage(pkg, rsm, ourFuel, custFuel, markup) {
+  const w = Math.round(pkg.weight);
+  const z = pkg.zone;
+  const cell = rsm[w]?.[z];
+
+  const accOur = accCost(pkg, 'cost');
+  const accSell = accCost(pkg, 'sell');
+  const accCust = (pkg.das_charge||0)+(pkg.das_extended||0)+(pkg.residential_charge||0)+
+    (pkg.address_correction||0)+(pkg.additional_handling||0)+(pkg.declared_value||0);
+  const custTotal = pkg.total_charge || (pkg.base_charge + pkg.fuel_surcharge + accCust);
+
+  const audit = {weight:w,zone:z,service:pkg.service,markup,ourFuel,custFuel,
+    bestRate:null,carrier:null,ourCostBase:null,ourCostTotal:null,
+    sellBase:null,sellFuel:null,sellTotal:null,
+    custBase:pkg.base_charge,custFuel:pkg.fuel_surcharge,custTotal,accOur,accSell,accCust};
+
+  if (!cell) {
+    return {...pkg,bestRate:null,carrier:null,ourCostBase:null,ourCostTotal:null,
+      sellBase:null,sellFuel:null,sellTotal:null,custTotal,margin:null,marginPct:null,
+      custSavings:0,status:'no_rate',audit};
+  }
+
+  const bestRate = cell.rate;
+  const ourCostBase = bestRate * (1 + ourFuel/100);
+  const ourCostTotal = ourCostBase + accOur;
+  const sellBase = bestRate * (1 + markup/100);
+  const sellFuel = sellBase * custFuel/100;
+  const sellTotal = sellBase + sellFuel + accSell;
+  const margin = sellTotal - ourCostTotal;
+  const marginPct = sellTotal > 0 ? margin/sellTotal*100 : 0;
+
+  let status;
+  if (pkg.correction_flag) status = 'correction';
+  else if (sellTotal < custTotal) status = 'green';
+  else if (ourCostTotal < custTotal) status = 'grey';
+  else status = 'red';
+
+  const custSavings = status === 'green' ? Math.max(0, custTotal - sellTotal) : 0;
+
+  Object.assign(audit,{bestRate,carrier:cell.carrier,ourCostBase,ourCostTotal,
+    sellBase,sellFuel,sellTotal,margin,marginPct});
+
+  return {...pkg,bestRate,carrier:cell.carrier,ourCostBase,ourCostTotal,
+    sellBase,sellFuel,sellTotal,custTotal,margin,marginPct,custSavings,status,audit};
+}
+
+function runScenario() {
+  if (!state.invoice) { showRunError('Upload an invoice first (Setup tab).'); return; }
+  if (state.selectedCardIds.size === 0) { showRunError('Select at least one rate card.'); return; }
+
+  const markup = parseFloat(document.getElementById('markup-num').value) || 0;
+  const ourFuel = parseFloat(document.getElementById('our-fuel').value) || 0;
+  const custFuel = parseFloat(document.getElementById('cust-fuel').value) || 0;
+  const pubFuel = parseFloat(document.getElementById('pub-fuel').value) || 0;
+  const mult = parseFloat(document.getElementById('vol-mult').value) || 1;
+
+  const rsms = {};
+  SERVICES.forEach(svc => { rsms[svc] = buildRSM(svc); });
+
+  const packages = state.invoice.packages.map(pkg => {
+    const rsm = rsms[pkg.service] || {};
+    return pricePackage(pkg, rsm, ourFuel, custFuel, markup);
+  });
+
+  const active = packages.filter(p => !p.correction_flag && p.status !== 'correction');
+  const green = active.filter(p => p.status === 'green');
+  const grey = active.filter(p => p.status === 'grey');
+  const red = active.filter(p => p.status === 'red');
+  const noRate = active.filter(p => p.status === 'no_rate');
+
+  const sum = (arr, f) => arr.reduce((s,p) => s + (p[f]||0), 0);
+
+  const custTotal = sum(active,'custTotal');
+  const sellTotal = sum(active,'sellTotal');
+  const costTotal = sum(active,'ourCostTotal');
+  const savings = sum(green,'custSavings');
+  const margin = sum(active,'margin');
+
+  const summary = {
+    total:active.length, green:green.length, grey:grey.length,
+    red:red.length, noRate:noRate.length, corrections:packages.length - active.length,
+    custMonthly:custTotal*mult, sellMonthly:sellTotal*mult, costMonthly:costTotal*mult,
+    savingsMonthly:savings*mult, marginMonthly:margin*mult,
+    marginPct:sellTotal>0?margin/sellTotal*100:0,
+    markup, ourFuel, custFuel, pubFuel, mult,
+    fuelSpread:custFuel-ourFuel,
+  };
+
+  state.result = {summary, packages, rateSourceMaps:rsms};
+  showRunError('');
+  updateSummaryUI(summary);
+  document.getElementById('run-status').textContent =
+    `Ran ${packages.length} packages · ${new Date().toLocaleTimeString()}`;
+
+  // Refresh other tabs if visible
+  renderGrid();
+  renderPackageTable();
+}
+
+function showRunError(msg) {
+  const el = document.getElementById('run-error');
+  if (msg) el.innerHTML = `<div class="alert alert-red">${msg}</div>`;
+  else el.innerHTML = '';
+}
+
+function fmt$(n) {
+  if (n == null || isNaN(n)) return '—';
+  return '$' + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function fmtPct(n) { if (n == null) return '—'; return n.toFixed(1)+'%'; }
+function fmtK(n) { if (n == null) return '—'; if (Math.abs(n)>=1000) return '$'+( n/1000).toFixed(1)+'k'; return fmt$(n); }
+
+function updateSummaryUI(s) {
+  document.getElementById('st-pkgs').textContent = s.total.toLocaleString();
+  document.getElementById('st-cust').textContent = fmtK(s.custMonthly);
+  document.getElementById('st-sell').textContent = fmtK(s.sellMonthly);
+  document.getElementById('st-cost').textContent = fmtK(s.costMonthly);
+  document.getElementById('st-savings').textContent = fmtK(s.savingsMonthly);
+  document.getElementById('st-margin').textContent = fmtK(s.marginMonthly);
+  document.getElementById('st-marginpct').textContent = fmtPct(s.marginPct);
+  document.getElementById('st-corrections').textContent = s.corrections;
+
+  const total = s.green + s.grey + s.red + s.noRate;
+  const pct = n => total > 0 ? (n/total*100).toFixed(1) : 0;
+  const bar = document.getElementById('status-bar');
+  bar.innerHTML = [
+    [s.green,'#16a34a'],[s.grey,'#9ca3af'],[s.red,'#dc2626'],[s.noRate,'#7c3aed']
+  ].map(([n,c]) => n>0?`<div class="pill-seg" style="width:${pct(n)}%;background:${c}"></div>`:'').join('');
+
+  document.getElementById('status-legend').innerHTML = [
+    {c:'#16a34a',bg:'',[Symbol.iterator]:undefined, label:'Green — saves customer',n:s.green},
+    {c:'#9ca3af',label:'Grey — match price',n:s.grey},
+    {c:'#dc2626',label:'Red — can\'t compete',n:s.red},
+    ...(s.noRate>0?[{c:'#7c3aed',label:'No rate',n:s.noRate}]:[]),
+  ].filter(x=>x.c).map(x=>`
+    <div class="legend-item" style="background:${x.c}18">
+      <div class="dot" style="background:${x.c}"></div>
+      <strong style="color:${x.c}">${x.n.toLocaleString()}</strong>
+      <span style="color:#374151;font-size:12px">${x.label}</span>
+      <span style="color:#94a3b8;font-size:11px">${pct(x.n)}%</span>
+    </div>
+  `).join('');
+}
+
+// ── RATE GRID ────────────────────────────────────────────────────────────────
+function setGridService(svc, btn) {
+  state.gridService = svc;
+  btn.closest('.tabs-inner').querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b===btn));
+  renderGrid();
+}
+function setGridView(v, btn) {
+  state.gridView = v;
+  btn.closest('.tabs-inner').querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b===btn));
+  renderGrid();
+}
+
+function renderGrid() {
+  const container = document.getElementById('grid-container');
+  if (!state.result) { container.innerHTML = '<p class="empty">Run a scenario to generate rate grids.</p>'; return; }
+  const rsm = state.result.rateSourceMaps[state.gridService] || {};
+  const s = state.result.summary;
+  const markup = s.markup, ourFuel = s.ourFuel, custFuel = s.custFuel;
+  const views = {
+    sell:`Sell base = best rate × (1+${markup.toFixed(1)}% markup). Green = we win this cell.`,
+    cost:`Our cost = best rate × (1+${ourFuel.toFixed(1)}% fuel).`,
+    raw:'Best raw carrier rate before any adjustments.',
+    carrier:'Which carrier wins each weight/zone cell.',
+  };
+  document.getElementById('grid-hint').textContent = views[state.gridView] + ' Click any cell to audit.';
+
+  const weights = Object.keys(rsm).map(Number).sort((a,b)=>a-b);
+  if (weights.length === 0) { container.innerHTML = '<p class="empty">No rate data for this service with selected cards.</p>'; return; }
+
+  const getVal = (cell) => {
+    if (!cell) return null;
+    if (state.gridView === 'raw') return cell.rate;
+    if (state.gridView === 'cost') return cell.rate * (1+ourFuel/100);
+    if (state.gridView === 'sell') return cell.rate * (1+markup/100);
+    if (state.gridView === 'carrier') return cell.carrier;
+    return null;
+  };
+
+  const rows = weights.map(w => {
+    const cols = ZONES.map(z => {
+      const cell = rsm[w]?.[z];
+      const val = getVal(cell);
+      if (val == null) return `<td class="grid-cell none-cell">—</td>`;
+      const display = state.gridView === 'carrier' ? val : fmt$(val);
+      const cls = state.gridView === 'sell' ? 'green-cell' : state.gridView === 'cost' ? 'blue-cell' : '';
+      const onclick = cell ? `onclick="auditCell(${w},${z},'${state.gridService}',${JSON.stringify(cell).replace(/"/g,'&quot;')})"` : '';
+      return `<td class="grid-cell ${cls}" title="W${w} Z${z}: ${cell?.carrier} $${cell?.rate?.toFixed(2)}" ${onclick}>${display}</td>`;
+    }).join('');
+    return `<tr><td class="weight-cell">${w}</td>${cols}</tr>`;
+  }).join('');
+
+  container.innerHTML = `<table>
+    <thead><tr><th>Wt</th>${ZONES.map(z=>`<th>Zone ${z}</th>`).join('')}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function auditCell(w, z, svc, cell) {
+  const s = state.result?.summary;
+  if (!s) return;
+  const markup = s.markup, ourFuel = s.ourFuel, custFuel = s.custFuel;
+  const ourCost = cell.rate * (1+ourFuel/100);
+  const sellBase = cell.rate * (1+markup/100);
+  const sellFuel = sellBase * custFuel/100;
+  document.getElementById('audit-tracking').textContent = `Cell: Weight ${w} / Zone ${z} / ${SVC_LABELS[svc]||svc}`;
+  document.getElementById('audit-body').innerHTML = [
+    ['Carrier',cell.carrier,''],
+    ['Best Raw Rate',fmt$(cell.rate),''],
+    ['','',''],
+    ['Our Fuel %',fmtPct(ourFuel),''],
+    ['Our Cost Base',fmt$(ourCost),'color:#1d4ed8;font-weight:700'],
+    ['','',''],
+    ['Markup %',fmtPct(markup),''],
+    ['Sell Base',fmt$(sellBase),'color:#16a34a;font-weight:700'],
+    ['Customer Fuel %',fmtPct(custFuel),''],
+    ['Sell Fuel',fmt$(sellFuel),''],
+    ['Sell Total (before acc)',fmt$(sellBase+sellFuel),'color:#16a34a;font-weight:700'],
+  ].map(([l,v,style]) => l ? `<tr class="audit-row"><td style="color:#64748b">${l}</td><td style="${style}">${v}</td></tr>`
+    : '<tr><td colspan="2" style="border-top:1px solid #f1f5f9;padding:3px 0"></td></tr>'
+  ).join('');
+  document.getElementById('audit-formula').innerHTML =
+    `<strong>Formula:</strong> sell base = ${fmt$(cell.rate)} × (1 + ${markup.toFixed(1)}%) = ${fmt$(sellBase)}<br>
+    <strong>Our cost:</strong> ${fmt$(cell.rate)} × (1 + ${ourFuel.toFixed(1)}%) = ${fmt$(ourCost)}`;
+  document.getElementById('audit-modal').style.display = 'flex';
+}
+
+// ── PACKAGE TABLE ─────────────────────────────────────────────────────────────
+function filterPackages() {
+  state.pkgPage = 0;
+  renderPackageTable();
+}
+
+function renderPackageTable() {
+  if (!state.result) {
+    document.getElementById('pkg-table-wrap').innerHTML = '<p class="empty">Run a scenario first.</p>';
+    return;
+  }
+  const all = state.result.packages;
+  const filter = state.pkgFilter;
+  const search = (document.getElementById('pkg-search')?.value||'').toLowerCase();
+  let filtered = filter === 'all' ? all : all.filter(p => p.status === filter);
+  if (search) filtered = filtered.filter(p =>
+    (p.tracking||'').toLowerCase().includes(search) || (p.reference||'').toLowerCase().includes(search));
+
+  // Render filter buttons
+  const counts = {all:all.length, green:0, grey:0, red:0, correction:0, no_rate:0};
+  all.forEach(p => { if (counts[p.status]!==undefined) counts[p.status]++; });
+  document.getElementById('pkg-filters').innerHTML =
+    ['all','green','grey','red','correction','no_rate'].map(f =>
+      `<button class="btn btn-ghost" style="padding:3px 9px;font-size:11px;${state.pkgFilter===f?'background:var(--blue);color:#fff;':''}"
+        onclick="state.pkgFilter='${f}';filterPackages()">${f==='all'?`All (${counts.all})`:f} ${f!=='all'?`(${counts[f]})`:''}</button>`
+    ).join('');
+
+  // Totals
+  const active = filtered.filter(p => !p.correction_flag);
+  const totals = {cust:0,sell:0,cost:0,savings:0,margin:0};
+  active.forEach(p => {
+    totals.cust += p.custTotal||0; totals.sell += p.sellTotal||0;
+    totals.cost += p.ourCostTotal||0;
+    if (p.status==='green') totals.savings += p.custSavings||0;
+    totals.margin += p.margin||0;
+  });
+  const totDiv = document.getElementById('pkg-totals');
+  totDiv.style.display = '';
+  totDiv.innerHTML = `<strong>${filtered.length.toLocaleString()} packages</strong> &nbsp;|&nbsp;
+    Their: <strong>${fmt$(totals.cust)}</strong> &nbsp;|&nbsp;
+    Sell: <strong>${fmt$(totals.sell)}</strong> &nbsp;|&nbsp;
+    Cost: <strong>${fmt$(totals.cost)}</strong> &nbsp;|&nbsp;
+    Savings: <strong style="color:var(--green)">${fmt$(totals.savings)}</strong> &nbsp;|&nbsp;
+    Margin: <strong style="color:var(--blue)">${fmt$(totals.margin)}</strong>`;
+
+  // Pagination
+  const pages = Math.ceil(filtered.length / PKG_PAGE_SIZE);
+  const page = Math.min(state.pkgPage, Math.max(0, pages-1));
+  state.pkgPage = page;
+  const visible = filtered.slice(page*PKG_PAGE_SIZE, (page+1)*PKG_PAGE_SIZE);
+
+  document.getElementById('pkg-count-display').textContent = `Page ${page+1}/${Math.max(1,pages)}`;
+
+  const rows = visible.map((pkg,i) => {
+    const s = pkg.status || 'no_rate';
+    const cls = {green:'pkg-green',grey:'pkg-grey',red:'pkg-red',correction:'pkg-correction',no_rate:'pkg-no_rate'}[s]||'';
+    const acc = (pkg.das_charge||0)+(pkg.das_extended||0)+(pkg.residential_charge||0)+(pkg.address_correction||0)+(pkg.additional_handling||0);
+    const savings = s==='green' ? (pkg.custSavings||0) : 0;
+    return `<tr class="${cls}" onclick="showAudit(${page*PKG_PAGE_SIZE+i})" style="cursor:pointer" title="Click to audit">
+      <td style="color:var(--blue);text-decoration:underline;font-size:11px">${pkg.tracking||`#${i+1}`}</td>
+      <td class="center">${pkg.weight}</td>
+      <td class="center">${pkg.zone||'?'}</td>
+      <td style="font-size:11px">${(pkg.service||'').replace('_',' ')}</td>
+      <td class="center" style="color:#d97706">${pkg.correction_flag?'⚠':''}</td>
+      <td class="right">${fmt$(pkg.base_charge)}</td>
+      <td class="right">${fmt$(pkg.fuel_surcharge)}</td>
+      <td class="right">${fmt$(acc)}</td>
+      <td class="right" style="font-weight:600">${fmt$(pkg.custTotal)}</td>
+      <td class="right">${pkg.sellBase!=null?fmt$(pkg.sellBase):'—'}</td>
+      <td class="right" style="font-weight:600">${pkg.sellTotal!=null?fmt$(pkg.sellTotal):'—'}</td>
+      <td class="right">${pkg.ourCostTotal!=null?fmt$(pkg.ourCostTotal):'—'}</td>
+      <td class="right" style="color:var(--green);font-weight:600">${savings>0?fmt$(savings):'—'}</td>
+      <td class="right" style="color:var(--blue)">${pkg.margin!=null?fmt$(pkg.margin):'—'}</td>
+      <td class="center" style="font-weight:700;font-size:10px">${s.toUpperCase()}</td>
+    </tr>`;
+  }).join('');
+
+  // Store filtered for pagination index mapping
+  state._filteredPackages = filtered;
+
+  document.getElementById('pkg-table-wrap').innerHTML = `<table>
+    <thead><tr>
+      <th class="left">Tracking</th><th>Wt</th><th>Zn</th><th class="left">Svc</th><th>C</th>
+      <th>Their Base</th><th>Their Fuel</th><th>Their Acc</th><th>Their Total</th>
+      <th>Sell Base</th><th>Sell Total</th><th>Our Cost</th><th>Savings</th><th>Margin</th><th>Status</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+
+  // Pagination controls
+  const pgEl = document.getElementById('pkg-pagination');
+  if (pages > 1) {
+    pgEl.innerHTML = [
+      `<button class="btn btn-ghost" style="padding:3px 8px" onclick="state.pkgPage=0;renderPackageTable()" ${page===0?'disabled':''}>«</button>`,
+      `<button class="btn btn-ghost" style="padding:3px 8px" onclick="state.pkgPage=Math.max(0,state.pkgPage-1);renderPackageTable()" ${page===0?'disabled':''}>‹</button>`,
+      `<span style="padding:0 10px;font-size:12px;color:#64748b">${page+1} / ${pages}</span>`,
+      `<button class="btn btn-ghost" style="padding:3px 8px" onclick="state.pkgPage=Math.min(${pages-1},state.pkgPage+1);renderPackageTable()" ${page===pages-1?'disabled':''}>›</button>`,
+      `<button class="btn btn-ghost" style="padding:3px 8px" onclick="state.pkgPage=${pages-1};renderPackageTable()" ${page===pages-1?'disabled':''}>»</button>`,
+    ].join('');
+  } else { pgEl.innerHTML = ''; }
+}
+
+function showAudit(globalIdx) {
+  const pkg = state._filteredPackages?.[globalIdx] || state.result?.packages?.[globalIdx];
+  if (!pkg) return;
+  const a = pkg.audit || {};
+  document.getElementById('audit-tracking').innerHTML =
+    `<strong>${pkg.tracking||''}</strong>${pkg.reference?' | Ref: '+pkg.reference:''}`;
+
+  const rows = [
+    ['Weight', a.weight||pkg.weight],
+    ['Zone', a.zone||pkg.zone||'?'],
+    ['Service', a.service||pkg.service],
+    null,
+    ['Carrier Rate Used', fmt$(a.bestRate)],
+    ['Carrier', a.carrier||pkg.carrier||'—'],
+    null,
+    ['Our Fuel %', fmtPct(a.ourFuel)],
+    ['Our Cost Base', fmt$(a.ourCostBase)],
+    ['Accessorials (our cost)', fmt$(a.accOur)],
+    ['Our Cost Total', fmt$(a.ourCostTotal), '#1d4ed8'],
+    null,
+    ['Markup %', fmtPct(a.markup)],
+    ['Sell Base', fmt$(a.sellBase)],
+    ['Customer Fuel %', fmtPct(a.custFuel)],
+    ['Sell Fuel', fmt$(a.sellFuel)],
+    ['Accessorials (sell)', fmt$(a.accSell)],
+    ['Sell Total', fmt$(a.sellTotal), '#16a34a'],
+    null,
+    ['Customer Base', fmt$(a.custBase)],
+    ['Customer Fuel', fmt$(a.custFuel)],
+    ['Customer Accessorials', fmt$(a.accCust)],
+    ['Customer Total', fmt$(a.custTotal), '#374151'],
+    null,
+    ['Margin', fmt$(pkg.margin), pkg.status==='green'?'#16a34a':'#dc2626'],
+    ['Margin %', fmtPct(pkg.marginPct)],
+    ['Status', (pkg.status||'').toUpperCase()],
+  ];
+
+  document.getElementById('audit-body').innerHTML = rows.map(r =>
+    !r ? '<tr><td colspan="2" style="border-top:1px solid #f1f5f9;padding:3px 0"></td></tr>'
+    : `<tr class="audit-row"><td style="color:#64748b">${r[0]}</td><td style="${r[2]?`color:${r[2]};font-weight:700`:''}">${r[1]}</td></tr>`
+  ).join('');
+
+  document.getElementById('audit-formula').innerHTML =
+    `<strong>Formula:</strong> sell total = best_rate × (1+markup%) × (1+cust_fuel%) + accessorials<br>
+    <strong>Margin:</strong> sell total − our cost total<br>
+    <strong>Classification:</strong> GREEN if sell &lt; their total | GREY if our cost &lt; their total | RED if our cost ≥ their total`;
+
+  document.getElementById('audit-modal').style.display = 'flex';
+}
+
+function closeAudit(e) {
+  if (e.target === document.getElementById('audit-modal'))
+    document.getElementById('audit-modal').style.display = 'none';
+}
+
+// ── SCENARIOS ────────────────────────────────────────────────────────────────
+function saveScenario() {
+  if (!state.result) { toast('Run a scenario first'); return; }
+  const name = document.getElementById('scenario-name').value.trim() ||
+    `Scenario ${state.scenarios.length+1}`;
+  state.scenarios.push({id:Date.now(), name, summary:{...state.result.summary}});
+  toast(`Saved: ${name}`);
+  renderScenarios();
+}
+
+function renderScenarios() {
+  const el = document.getElementById('scenario-cards');
+  if (state.scenarios.length === 0) {
+    el.innerHTML = '<p class="empty">No saved scenarios. Run one and click "Save Scenario".</p>';
+    document.getElementById('scenario-compare').innerHTML = '';
+    return;
+  }
+
+  el.innerHTML = state.scenarios.map(sc => `
+    <div class="scenario-card ${sc.selected?'selected':''}" style="min-width:200px">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" ${sc.selected?'checked':''} onchange="toggleScenario(${sc.id},this.checked)">
+        <strong style="font-size:13px">${sc.name}</strong>
+      </label>
+      <div style="font-size:11px;color:#64748b;margin-top:3px">
+        Markup: ${fmtPct(sc.summary.markup)} · Margin: ${fmtK(sc.summary.marginMonthly)}/mo
+      </div>
+      <button class="btn btn-ghost" style="position:absolute;top:8px;right:8px;padding:2px 7px;font-size:11px"
+        onclick="deleteScenario(${sc.id})">×</button>
+    </div>
+  `).join('');
+
+  const selected = state.scenarios.filter(s => s.selected);
+  if (selected.length >= 2) renderCompareTable(selected);
+  else document.getElementById('scenario-compare').innerHTML = '<p class="empty">Select 2+ scenarios to compare.</p>';
+}
+
+function toggleScenario(id, checked) {
+  state.scenarios.forEach(s => { if (s.id===id) s.selected=checked; });
+  renderScenarios();
+}
+function deleteScenario(id) {
+  state.scenarios = state.scenarios.filter(s => s.id!==id);
+  renderScenarios();
+}
+
+function renderCompareTable(scenarios) {
+  const metrics = [
+    ['Markup %', s => fmtPct(s.summary.markup)],
+    ['Our Fuel %', s => fmtPct(s.summary.ourFuel)],
+    ['Customer Fuel %', s => fmtPct(s.summary.custFuel)],
+    ['Volume Multiplier', s => s.summary.mult],
+    null,
+    ['Total Packages', s => s.summary.total.toLocaleString()],
+    ['Green', s => s.summary.green.toLocaleString()],
+    ['Grey', s => s.summary.grey.toLocaleString()],
+    ['Red', s => s.summary.red.toLocaleString()],
+    null,
+    ['Customer Monthly', s => fmtK(s.summary.custMonthly)],
+    ['Our Sell Monthly', s => fmtK(s.summary.sellMonthly)],
+    ['Our Cost Monthly', s => fmtK(s.summary.costMonthly)],
+    ['Customer Savings/Mo', s => fmtK(s.summary.savingsMonthly)],
+    ['Odyssey Margin/Mo', s => fmtK(s.summary.marginMonthly)],
+    ['Margin %', s => fmtPct(s.summary.marginPct)],
+  ];
+
+  const rows = metrics.map((m, i) => {
+    if (!m) return `<tr><td colspan="${scenarios.length+1}" style="background:#e2e8f0;height:4px;padding:0"></td></tr>`;
+    const vals = scenarios.map(s => m[1](s));
+    const isMargin = m[0].includes('Margin');
+    const numVals = vals.map(v => parseFloat(v.replace(/[^0-9.-]/g,'')) || 0);
+    const best = isMargin ? Math.max(...numVals) : null;
+    return `<tr style="background:${i%2===0?'#f8fafc':'#fff'}">
+      <td style="padding:6px 10px;font-weight:600;color:#475569">${m[0]}</td>
+      ${vals.map((v,vi) => {
+        const isBest = isMargin && numVals[vi] === best && best > 0;
+        return `<td style="padding:6px 10px;text-align:center;${isBest?'background:var(--green-bg);color:var(--green);font-weight:700':''}">${v}</td>`;
+      }).join('')}
+    </tr>`;
+  }).join('');
+
+  document.getElementById('scenario-compare').innerHTML = `
+    <div class="table-wrap"><table>
+      <thead><tr>
+        <th class="left">Metric</th>
+        ${scenarios.map(s=>`<th>${s.name}</th>`).join('')}
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  `;
+}
+
+// ── EXPORTS ──────────────────────────────────────────────────────────────────
+function exportCSV(type) {
+  if (!state.result) { alert('Run a scenario first'); return; }
+  const s = state.result.summary;
+  const pkgs = state.result.packages;
+  const name = document.getElementById('exp-scenario').value || 'Proposal';
+  const account = document.getElementById('exp-account').value || 'Account';
+  const strategy = document.getElementById('exp-strategy').value || '';
+
+  if (type === 'customer') {
+    const header = ['Tracking','Weight','Zone','Service','Their Base','Their Fuel','Their Acc','Their Total',
+      'Sell Base','Sell Total','Our Cost','Savings','Status'];
+    const rows = pkgs.filter(p=>!p.correction_flag).map(p => {
+      const acc = (p.das_charge||0)+(p.das_extended||0)+(p.residential_charge||0)+(p.address_correction||0)+(p.additional_handling||0);
+      return [p.tracking||'',p.weight,p.zone||'',p.service,
+        p.base_charge,p.fuel_surcharge,acc.toFixed(2),p.custTotal,
+        p.sellBase!=null?p.sellBase.toFixed(2):'N/A',
+        p.sellTotal!=null?p.sellTotal.toFixed(2):'N/A',
+        p.ourCostTotal!=null?p.ourCostTotal.toFixed(2):'N/A',
+        p.status==='green'?(p.custSavings||0).toFixed(2):'0.00',
+        p.status.toUpperCase()];
+    });
+    const totals = ['TOTALS','','','',
+      pkgs.reduce((s,p)=>s+(p.base_charge||0),0).toFixed(2),'','',
+      pkgs.reduce((s,p)=>s+(p.custTotal||0),0).toFixed(2),'',
+      pkgs.reduce((s,p)=>s+(p.sellTotal||0),0).toFixed(2),
+      pkgs.reduce((s,p)=>s+(p.ourCostTotal||0),0).toFixed(2),
+      pkgs.filter(p=>p.status==='green').reduce((s,p)=>s+(p.custSavings||0),0).toFixed(2),''];
+    downloadCSV([header,...rows,totals], `${name}_customer.csv`);
+
+  } else if (type === 'internal') {
+    let content = `INTERNAL — ${name}\n\n`;
+    content += `EXECUTIVE SUMMARY\n`;
+    content += `Total Packages,${s.total}\nGreen,${s.green}\nGrey,${s.grey}\nRed,${s.red}\n`;
+    content += `Customer Monthly,$${s.custMonthly.toFixed(2)}\n`;
+    content += `Sell Monthly,$${s.sellMonthly.toFixed(2)}\n`;
+    content += `Cost Monthly,$${s.costMonthly.toFixed(2)}\n`;
+    content += `Customer Savings/Mo,$${s.savingsMonthly.toFixed(2)}\n`;
+    content += `Odyssey Margin/Mo,$${s.marginMonthly.toFixed(2)}\n`;
+    content += `Margin %,${s.marginPct.toFixed(2)}%\n`;
+    content += `Markup,${s.markup.toFixed(1)}%\nOur Fuel,${s.ourFuel.toFixed(1)}%\n`;
+    content += `Customer Fuel,${s.custFuel.toFixed(1)}%\nFuel Spread,${s.fuelSpread.toFixed(1)}%\n\n`;
+    content += `PACKAGE P&L DETAIL\nTracking,Weight,Zone,Service,Correction,Their Base,Their Total,Best Rate,Carrier,Our Cost,Sell Base,Sell Total,Margin,Status\n`;
+    pkgs.forEach(p => {
+      content += `${p.tracking||''},${p.weight},${p.zone||''},${p.service},${p.correction_flag?'YES':'no'},`;
+      content += `${p.base_charge},${p.custTotal},${p.bestRate||''},${p.carrier||''},`;
+      content += `${p.ourCostTotal||''},${p.sellBase||''},${p.sellTotal||''},${p.margin||''},${p.status}\n`;
+    });
+    content += `\nBILLING INSTRUCTIONS\n`;
+    content += `Bill customer: sell base + (sell base × ${s.custFuel.toFixed(1)}%) + pass-through accessorials\n`;
+    content += `Rate source: see rate source map\nFuel: apply customer fuel % to sell base each invoice\n`;
+    downloadText(content, `${name}_internal.csv`);
+
+  } else if (type === 'brief') {
+    const mult = s.mult || 1;
+    let doc = `DEAL BRIEF — ${account}\nPrepared: ${new Date().toLocaleDateString()}\n\n`;
+    doc += `1. ACCOUNT OVERVIEW\n${'─'.repeat(50)}\n`;
+    doc += `Account: ${account}\n`;
+    doc += `Monthly Packages: ${s.total.toLocaleString()}\n`;
+    doc += `Current Monthly Spend: $${s.custMonthly.toFixed(2)}\n\n`;
+    doc += `2. STRATEGY\n${'─'.repeat(50)}\n`;
+    doc += strategy || 'Win the account with meaningful savings while maintaining target margin. Green packages represent immediate wins. Grey packages are matched at current price — we earn the fuel spread.';
+    doc += '\n\n';
+    doc += `3. MONTHLY ECONOMICS\n${'─'.repeat(50)}\n`;
+    doc += `Customer Current Monthly:   $${s.custMonthly.toFixed(2)}\n`;
+    doc += `Proposed Sell Monthly:      $${s.sellMonthly.toFixed(2)}\n`;
+    doc += `Customer Savings Monthly:   $${s.savingsMonthly.toFixed(2)}\n`;
+    doc += `Odyssey Cost Monthly:       $${s.costMonthly.toFixed(2)}\n`;
+    doc += `Odyssey Margin Monthly:     $${s.marginMonthly.toFixed(2)}\n`;
+    doc += `Margin %:                   ${s.marginPct.toFixed(2)}%\n`;
+    doc += `Green Packages:             ${s.green}\n`;
+    doc += `Grey Packages:              ${s.grey}\n`;
+    doc += `Red Packages:               ${s.red}\n\n`;
+    doc += `4. MARGIN SOURCES\n${'─'.repeat(50)}\n`;
+    doc += `Base markup: ${s.markup.toFixed(1)}% applied to best available rate.\n`;
+    doc += `Fuel spread: Customer pays ${s.custFuel.toFixed(1)}% fuel; we pay ${s.ourFuel.toFixed(1)}% — ${s.fuelSpread.toFixed(1)}% spread on every dollar of base.\n`;
+    doc += `Accessorials: passed through at invoice rate.\n\n`;
+    doc += `5. PRICING MECHANICS\n${'─'.repeat(50)}\n`;
+    doc += `Sell base = best carrier rate × (1 + ${s.markup.toFixed(1)}% markup)\n`;
+    doc += `Sell fuel = sell base × ${s.custFuel.toFixed(1)}%\n`;
+    doc += `Our cost = best carrier rate × (1 + ${s.ourFuel.toFixed(1)}%)\n`;
+    doc += `Margin per package = sell total − our cost total\n`;
+    doc += `GREEN if sell total < their current | GREY if our cost < their total | RED if our cost ≥ their total\n\n`;
+    doc += `6. BILLING WORKFLOW\n${'─'.repeat(50)}\n`;
+    doc += `1. Receive carrier invoice weekly.\n`;
+    doc += `2. Match each package to rate source map.\n`;
+    doc += `3. Bill customer: sell base + (sell base × ${s.custFuel.toFixed(1)}%) + pass-through accessorials.\n`;
+    doc += `4. Verify margin on each invoice before sending.\n`;
+    doc += `5. Flag correction/rebill rows — exclude from savings calculations.\n\n`;
+    doc += `7. RISKS\n${'─'.repeat(50)}\n`;
+    doc += `• Zone chart changes by carrier — re-validate quarterly.\n`;
+    doc += `• Fuel surcharge fluctuates — lock customer fuel % or tie to published index.\n`;
+    doc += `• DAS/residential mix can shift — monitor monthly.\n`;
+    doc += `• Red packages: do not promise savings; present as pricing parity.\n\n`;
+    doc += `8. PITCH SCRIPT\n${'─'.repeat(50)}\n`;
+    doc += `"Based on your actual shipping data, we can save you approximately $${s.savingsMonthly.toFixed(0)}/month — `;
+    doc += `$${(s.savingsMonthly*12).toFixed(0)} annualized — with zero disruption to your current operations. `;
+    doc += `You keep your carrier relationships; we optimize the economics. `;
+    doc += `Every number in this proposal is auditable back to your own invoice data."\n`;
+    downloadText(doc, `${account}_deal_brief.txt`);
+  }
+}
+
+function downloadCSV(rows, filename) {
+  const content = rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  downloadText(content, filename);
+}
+
+function downloadText(content, filename) {
+  const blob = new Blob([content], {type:'text/plain;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+</script>
+</body>
+</html>
