@@ -875,6 +875,21 @@ async function handleRCUpload(input){
       }
     } else {
       const sheets=await parseXLSX(file);
+
+      // Cross-type detection: warn if this looks like an invoice
+      const sniff=sniffFileType(sheets);
+      if(sniff.type==='invoice'){
+        setStatus('rc-upload-status','');
+        document.getElementById('rc-parse-report').innerHTML=`<div class="alert alert-yellow" style="margin-top:8px">
+          ⚠ <strong>This looks like an invoice, not a rate card.</strong>
+          The file has columns like tracking numbers and charge amounts instead of zone weight tables.
+          If this is your customer's carrier invoice, upload it in the <strong>Customer Invoice</strong> section instead.
+          <br><button class="btn btn-primary" style="margin-top:8px" onclick="crossLoadAsInvoice('${name.replace(/'/g,"\\'")}',this)">→ Load as Invoice Instead</button>
+        </div>`;
+        state._pendingCrossFile={file,name};
+        input.value=''; return;
+      }
+
       for(const sheet of sheets){
         const result=parseRateCardSheet(sheet.name, sheet.rows);
         allReports.push(result);
@@ -1013,6 +1028,67 @@ function toggleRCGroup(name,checked){
   });
 }
 
+// ── FILE TYPE DETECTION ───────────────────────────────────────────────────────
+// Inspects sheets to decide if a file looks like a rate card or an invoice.
+// Returns: { type: 'rate_card'|'invoice'|'unknown', confidence, details }
+
+function sniffFileType(sheets) {
+  let rcSheets=0, invSheets=0;
+  const rcNames=[], invNames=[];
+
+  for(const sheet of sheets){
+    // Rate card signal: has a zone header row (Zone 2-8 or Zone X2-X8)
+    const allRows=Object.keys(sheet.rows).map(Number).sort((a,b)=>a-b);
+    let hasZoneHeader=false;
+    for(const rn of allRows.slice(0,15)){
+      if(detectZoneHeadersInRow(sheet.rows[rn])){ hasZoneHeader=true; break; }
+    }
+    if(hasZoneHeader){ rcSheets++; rcNames.push(sheet.name); continue; }
+
+    // Invoice signal: has columns matching weight+charge aliases
+    const firstRows=allRows.slice(0,5);
+    for(const rn of firstRows){
+      const row=sheet.rows[rn];
+      const vals=Object.values(row).map(v=>normH(v));
+      const hasWeight=vals.some(v=>['weight','billed weight','weight in lbs','wgt'].some(a=>v.includes(normH(a))));
+      const hasCharge=vals.some(v=>['charge','amount','freight','invoice'].some(a=>v.includes(a)));
+      const hasTracking=vals.some(v=>v.includes('tracking'));
+      if((hasWeight&&hasCharge)||hasTracking){ invSheets++; invNames.push(sheet.name); break; }
+    }
+  }
+
+  if(rcSheets>0&&invSheets===0) return {type:'rate_card',confidence:'high',sheets:rcNames};
+  if(invSheets>0&&rcSheets===0) return {type:'invoice',confidence:'high',sheets:invNames};
+  if(rcSheets>0&&invSheets>0)   return {type:'mixed',confidence:'medium',rcSheets:rcNames,invSheets:invNames};
+  return {type:'unknown',confidence:'low',sheets:sheets.map(s=>s.name)};
+}
+
+// Cross-load handlers: user clicked "load as X instead"
+async function crossLoadAsInvoice(name, btn){
+  if(!state._pendingCrossFile) return;
+  const {file} = state._pendingCrossFile;
+  document.getElementById('inv-name').value=name;
+  // Switch tab to show invoice section, then trigger the invoice uploader with the pending file
+  const dt = new DataTransfer(); dt.items.add(file);
+  const inp = document.getElementById('inv-file-input');
+  inp.files=dt.files;
+  document.getElementById('rc-parse-report').innerHTML='';
+  await handleInvUpload(inp);
+  state._pendingCrossFile=null;
+}
+
+async function crossLoadAsRC(name, btn){
+  if(!state._pendingCrossFile) return;
+  const {file} = state._pendingCrossFile;
+  document.getElementById('rc-name').value=name;
+  const dt = new DataTransfer(); dt.items.add(file);
+  const inp = document.getElementById('rc-file-input');
+  inp.files=dt.files;
+  document.getElementById('inv-parse-report').innerHTML='';
+  await handleRCUpload(inp);
+  state._pendingCrossFile=null;
+}
+
 // ── INVOICE UPLOAD ────────────────────────────────────────────────────────────
 function triggerInvUpload(){document.getElementById('inv-file-input').click();}
 
@@ -1030,15 +1106,48 @@ async function handleInvUpload(input){
       sheetUsed='(CSV)';
     } else {
       const sheets=await parseXLSX(file);
-      // Use sheet with most rows
-      const sheet=sheets.sort((a,b)=>Object.keys(b.rows).length-Object.keys(a.rows).length)[0];
-      sheetUsed=sheet?.name||'Sheet 1';
-      const result=parseInvoiceSheet(sheet.rows);
+
+      // Cross-type detection: warn if this looks like a rate card
+      const sniff=sniffFileType(sheets);
+      if(sniff.type==='rate_card'){
+        setStatus('inv-upload-status','');
+        document.getElementById('inv-parse-report').innerHTML=`<div class="alert alert-yellow" style="margin-top:8px">
+          ⚠ <strong>This looks like a rate card, not an invoice.</strong>
+          The file has zone weight tables (Zone 2–8) instead of per-package shipment rows.
+          If this is your carrier pricing file, upload it in the <strong>Rate Cards</strong> section instead.
+          <br><button class="btn btn-primary" style="margin-top:8px" onclick="crossLoadAsRC('${name.replace(/'/g,"\\'")}',this)">→ Load as Rate Card Instead</button>
+        </div>`;
+        state._pendingCrossFile={file,name};
+        input.value=''; return;
+      }
+
+      // Pick best invoice sheet: prefer sheets that have invoice-like columns over raw row count
+      // Score each sheet by how many invoice fields are detectable
+      const scored = sheets.map(s=>{
+        const allRows=Object.keys(s.rows).map(Number).sort((a,b)=>a-b);
+        let headerCells={};
+        for(const rn of allRows.slice(0,8)){
+          const r=s.rows[rn];
+          const strCells=Object.values(r).filter(v=>isNaN(parseFloat(v))&&v.trim&&v.trim().length>1);
+          if(strCells.length>=4){headerCells=r;break;}
+        }
+        let hits=0;
+        for(const [,aliases] of Object.entries(INV_ALIASES)){
+          if(findColByAliases(headerCells,aliases)) hits++;
+        }
+        return {sheet:s, hits, rows:Object.keys(s.rows).length};
+      });
+      // Sort: first by invoice field hits (desc), then by row count (desc)
+      scored.sort((a,b)=>b.hits!==a.hits?b.hits-a.hits:b.rows-a.rows);
+      const best=scored[0];
+      sheetUsed=best.sheet.name;
+      const result=parseInvoiceSheet(best.sheet.rows);
       packages=result.packages;
       invRpt=result.parseReport;
       if(invRpt) {
         invRpt.sheetUsed=sheetUsed;
-        invRpt.allSheets=sheets.map(s=>({name:s.name,rows:Object.keys(s.rows).length}));
+        invRpt.allSheets=sheets.map(s=>({name:s.name,rows:Object.keys(s.rows).length,
+          invScore:scored.find(x=>x.sheet.name===s.name)?.hits||0}));
       }
     }
 
@@ -1081,9 +1190,13 @@ async function handleInvUpload(input){
 
 function buildInvParseReport(fileName, rpt){
   if(!rpt) return '';
-  const sheetsHtml = (rpt.allSheets||[]).map(s=>
-    `<span class="parse-zone-chip${s.name===rpt.sheetUsed?' ':' parse-warn-chip'}">${s.name} (${s.rows} rows)${s.name===rpt.sheetUsed?' ←':''}</span>`
-  ).join(' ');
+  const sheetsHtml = (rpt.allSheets||[]).map(s=>{
+    const isUsed=s.name===rpt.sheetUsed;
+    const scoreNote=s.invScore!=null?` · ${s.invScore} fields`:'';
+    return `<span class="parse-zone-chip${isUsed?'':' parse-warn-chip'}" title="${s.invScore!=null?`Invoice field score: ${s.invScore}`:''}">
+      ${s.name} (${s.rows} rows${scoreNote})${isUsed?' ✓ used':''}
+    </span>`;
+  }).join(' ');
 
   const FIELD_LABELS={weight:'Weight',weight_use:'Billed Wt',zone:'Zone',service:'Service',
     base_charge:'Base Charge',discount:'Discount',misc_charge:'Misc/Fuel',net_charge:'Net Total',
