@@ -422,6 +422,7 @@ tr:hover td{background:rgba(91,140,255,.055)}
   <!-- RATE GRIDS -->
   <div id="tab-grid" style="display:none">
     <div class="card">
+      <div id="scenario-strip-grid" style="display:none;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)"></div>
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
         <h2 style="margin:0">Rate Source Maps</h2>
         <div style="display:flex;align-items:center;gap:10px;min-width:280px;flex:1;max-width:420px">
@@ -452,6 +453,7 @@ tr:hover td{background:rgba(91,140,255,.055)}
   <!-- PACKAGES -->
   <div id="tab-packages" style="display:none">
     <div class="card">
+      <div id="scenario-strip-pkg" style="display:none;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)"></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
         <h2 style="margin:0">Package Detail</h2>
         <div style="display:flex;gap:4px;flex-wrap:wrap" id="pkg-filters"></div>
@@ -1222,8 +1224,8 @@ function switchTab(id){
   ['setup','engine','grid','packages','export','scenarios'].forEach(t=>{
     document.getElementById(`tab-${t}`).style.display=t===id?'':'none';
   });
-  if(id==='grid') renderGrid();
-  if(id==='packages') renderPackageTable();
+  if(id==='grid'){renderGrid();renderScenarioStrip();}
+  if(id==='packages'){renderPackageTable();renderScenarioStrip();}
   if(id==='scenarios') renderScenarios();
 }
 
@@ -1998,7 +2000,7 @@ function renderScenarioPlanner(){
       <td style="text-align:right">${marCell}</td>
       <td style="text-align:right">
         <button class="btn btn-ghost" style="padding:3px 10px;font-size:11px"
-          onclick="applyScenarioMarkup(${m.toFixed(3)})">Apply</button>
+          onclick="applyScenarioMarkup(${m.toFixed(3)},${JSON.stringify(label)},${custSav.toFixed(2)},${ourMar.toFixed(2)})">Apply →</button>
       </td>
     </tr>`;
   }).join('');
@@ -2013,13 +2015,57 @@ function renderScenarioPlanner(){
     <tbody>${rows}</tbody>
   </table>
   <p class="sub" style="margin:8px 0 0">Surcharges (residential, DAS, etc.) excluded from delta — UPS and FedEx charge similarly for the same package profile, so they cancel out.</p>`;
+
+  renderScenarioStrip();
 }
 
-function applyScenarioMarkup(m){
+// Compact scenario strip shown at the top of Rate Grids and Packages tabs
+function renderScenarioStrip(){
+  const p=_deltaParams();
+  ['scenario-strip-grid','scenario-strip-pkg'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    if(!p||p.totalDelta<=0){el.style.display='none';return;}
+    el.style.display='';
+
+    const D=p.totalDelta, misc=p.miscMo||0, honestD=Math.max(0,D-misc);
+    const curLabel=state.activeScenario?.label||null;
+
+    const chips=[
+      ['Max margin',100],['80/20',80],['60/40',60],['50/50',50],
+      ['40/60',40],['20/80',20],['Max savings',0],
+    ].map(([label,ourPct])=>{
+      const ourMar=honestD*(ourPct/100);
+      const custSav=honestD*(1-ourPct/100);
+      const m=_solveMarkup(p,p.costMo+ourMar);
+      const active=curLabel===label||Math.abs(m-(state.activeScenario?.markup||p.curMarkup))<0.3;
+      return `<button onclick="applyScenarioMarkup(${m.toFixed(3)},${JSON.stringify(label)},${custSav.toFixed(2)},${ourMar.toFixed(2)})"
+        style="padding:5px 13px;border-radius:20px;border:1px solid ${active?'var(--blue)':'var(--border2)'};
+          background:${active?'rgba(91,140,255,.18)':'rgba(255,255,255,.04)'};
+          color:${active?'#a8c2ff':'var(--muted)'};font-size:11.5px;font-weight:${active?700:500};
+          cursor:pointer;white-space:nowrap;transition:all .15s"
+        title="Customer saves ${fmt$(custSav)}/mo · We make ${fmt$(ourMar)}/mo">${label}</button>`;
+    }).join('');
+
+    const activeSc=state.activeScenario;
+    const badge=activeSc
+      ?`<span style="font-size:11px;color:var(--green);font-weight:700;margin-left:8px">✓ ${activeSc.label} — cust saves ${fmt$(activeSc.custSav)}/mo · we make ${fmt$(activeSc.ourMar)}/mo</span>`
+      :'';
+
+    el.innerHTML=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+      <span style="font-size:11px;color:var(--faint);font-weight:700;text-transform:uppercase;letter-spacing:.7px;white-space:nowrap">Scenario</span>
+      ${chips}${badge}
+    </div>`;
+  });
+}
+
+function applyScenarioMarkup(m, label, custSav, ourMar){
   document.getElementById('markup-num').value=m.toFixed(2);
   document.getElementById('markup-slider').value=Math.min(m,500);
   document.getElementById('markup-display').textContent=(+m).toFixed(1)+'%';
+  state.activeScenario={label,markup:m,custSav,ourMar};
   runScenario();
+  switchTab('grid');
 }
 
 // kept for custom-target button
