@@ -2090,11 +2090,15 @@ function pricePackage(pkg,rsm,ourFuel,custFuel,markup){
   const w=Math.round(pkg.weight),z=pkg.zone;
   const cell=rsm[w]?.[z];
 
-  const misc=pkg.misc_charge||0;  // FedEx/carrier misc — kept for audit only, not passed to our sell
+  const misc=pkg.misc_charge||0;  // FedEx misc (fuel + surcharges bundled) — audit only
   const accOur=accCost(pkg,'cost');
   const accSell=accCost(pkg,'sell');
-  // custTotal = what they actually pay their carrier (freight + fuel + all surcharges)
+  // custTotal = FedEx all-in (display / audit only — includes surcharges we can't remove)
   const custTotal=pkg.total_charge||(pkg.base_charge+misc);
+  // freightBaseline = FedEx net freight charge only (post-discount, pre-surcharge)
+  // UPS charges similar surcharges for the same package → they cancel out between carriers
+  // So: real savings = FedEx base freight - our sell (apples-to-apples rate comparison)
+  const freightBaseline=pkg.base_charge>0?pkg.base_charge:custTotal;
 
   const audit={weight:w,zone:z,service:pkg.service,markup,ourFuel,custFuel,
     bestRate:null,carrier:null,ourCostBase:null,ourCostTotal:null,
@@ -2121,11 +2125,12 @@ function pricePackage(pkg,rsm,ourFuel,custFuel,markup){
 
   let status;
   if(pkg.correction_flag) status='correction';
-  else if(sellTotal<custTotal) status='green';
-  else if(ourCostTotal<custTotal) status='grey';
-  else status='red';
+  else if(sellTotal<freightBaseline) status='green';   // our sell beats FedEx base freight
+  else if(ourCostTotal<freightBaseline) status='grey'; // possible at lower markup, not at this one
+  else status='red';                                    // can't beat FedEx even at our cost
 
-  const custSavings=status==='green'?Math.max(0,custTotal-sellTotal):0;
+  // Honest savings = FedEx freight - our sell (surcharges cancel, so this is the real delta)
+  const custSavings=status==='green'?Math.max(0,freightBaseline-sellTotal):0;
   Object.assign(audit,{bestRate,carrier:cell.carrier,ourCostBase,ourCostTotal,sellBase,sellFuel,sellTotal,margin,marginPct});
 
   return {...pkg,bestRate,carrier:cell.carrier,ourCostBase,ourCostTotal,
@@ -2177,10 +2182,13 @@ function runScenario(){
   // Used by the Rate Grid to color cells green/grey/red accurately
   const benchmarks={};  // key: `${svc}|${w}|${z}` -> {sum, count}
   for(const pkg of active){
-    if(!pkg.zone||!pkg.custTotal) continue;
+    // Use base_charge (FedEx freight only) as benchmark — same reason as status logic:
+    // surcharges cancel between carriers, so freight rate is the honest comparison
+    const bv=pkg.base_charge>0?pkg.base_charge:pkg.custTotal;
+    if(!pkg.zone||!bv) continue;
     const key=`${pkg.service}|${Math.round(pkg.weight)}|${pkg.zone}`;
     if(!benchmarks[key]) benchmarks[key]={sum:0,count:0};
-    benchmarks[key].sum+=pkg.custTotal;
+    benchmarks[key].sum+=bv;
     benchmarks[key].count++;
   }
   state.result.benchmarks=benchmarks;
@@ -2457,7 +2465,8 @@ function showAudit(idx){
     ['Accessorials (sell)', fmt$(a.accSell)],
     ['Our Sell Total', fmt$(a.sellTotal),'var(--green)'],null,
     ['Their Net Freight', fmt$(a.custBase)],['Their Misc/Surcharges', fmt$(a.miscCharge)],
-    ['Their All-In Total', fmt$(a.custTotal),'var(--text)'],null,
+    ['Their FedEx All-In', fmt$(a.custTotal),'var(--text)'],
+    ['Their FedEx Freight (comparison base)', fmt$(a.custBase),'var(--muted)'],null,
     ['Margin', fmt$(pkg.margin), pkg.status==='green'?'var(--green)':'var(--red)'],
     ['Margin %', fmtPct(pkg.marginPct)],['Status', (pkg.status||'').toUpperCase()],
   ].map(r=>!r?`<tr><td colspan="2" style="border-top:1px solid #f1f5f9;padding:3px 0"></td></tr>`
