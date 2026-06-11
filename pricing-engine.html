@@ -177,6 +177,16 @@ tr:hover td{background:rgba(91,140,255,.045)}
 .markup-readout{font-size:30px;font-weight:800;letter-spacing:-1px;background:var(--grad);
   -webkit-background-clip:text;background-clip:text;color:transparent;font-variant-numeric:tabular-nums;
   min-width:108px;text-align:center}
+.step-chip{display:inline-flex;align-items:center;gap:7px;background:rgba(7,11,20,.5);
+  border:1px solid var(--border);border-radius:10px;padding:6px 12px;font-size:12px;color:var(--muted)}
+.step-chip b{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;
+  border-radius:50%;background:var(--grad);color:#fff;font-size:10.5px;flex-shrink:0}
+.step-arrow{color:var(--faint);font-size:13px}
+.suggest-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(45,212,127,.08);
+  border:1px solid rgba(45,212,127,.25);border-radius:8px;padding:3px 9px;font-size:11px;color:#7ce8b1}
+.suggest-chip button{background:rgba(45,212,127,.18);border:none;border-radius:5px;color:#7ce8b1;
+  font-size:10.5px;padding:2px 8px;cursor:pointer;font-weight:700}
+.suggest-chip button:hover{background:rgba(45,212,127,.32)}
 </style>
 </head>
 <body>
@@ -196,6 +206,13 @@ tr:hover td{background:rgba(91,140,255,.045)}
 <main>
   <!-- SETUP -->
   <div id="tab-setup">
+    <div class="card" style="padding:14px 22px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <span class="step-chip"><b>1</b> Upload rate card(s)</span><span class="step-arrow">→</span>
+      <span class="step-chip"><b>2</b> Upload customer invoice</span><span class="step-arrow">→</span>
+      <span class="step-chip"><b>3</b> Pricing Engine: check fuel, drag markup, Run</span><span class="step-arrow">→</span>
+      <span class="step-chip"><b>4</b> Review grids &amp; packages</span><span class="step-arrow">→</span>
+      <span class="step-chip"><b>5</b> Export proposal</span>
+    </div>
     <div class="two-col">
       <div class="card">
         <h2>Rate Cards</h2>
@@ -272,6 +289,11 @@ tr:hover td{background:rgba(91,140,255,.045)}
             </label>
           </div>
           <div class="alert alert-blue" id="fuel-spread-display"></div>
+          <div id="fuel-suggest"></div>
+          <p class="sub" style="margin:8px 0 0">
+            <strong>Our Fuel</strong> = what the carrier charges us (published index minus your FSC incentive).
+            <strong>Customer Fuel</strong> = what we bill — auto-detected from the invoice when possible.
+            The spread between them is pure margin on every freight dollar.</p>
         </div>
 
         <div class="card">
@@ -291,7 +313,9 @@ tr:hover td{background:rgba(91,140,255,.045)}
 
         <div class="card">
           <h3>Accessorial Configuration</h3>
-          <p class="sub">Passthrough = use customer's invoice amount. Custom = override with your negotiated rate.</p>
+          <p class="sub">Passthrough = bill the customer whatever their invoice shows. Custom = use your negotiated rates instead.
+            When a rate card contains an accessorial sheet, detected rates appear below — click Apply to use them.</p>
+          <div id="acc-suggest"></div>
           <table>
             <thead><tr>
               <th class="left">Accessorial</th><th>Mode</th><th>Our Rate</th><th>Customer Rate</th>
@@ -319,6 +343,9 @@ tr:hover td{background:rgba(91,140,255,.045)}
             <div class="stat"><div class="stat-label">Margin %</div><div class="stat-val blue" id="st-marginpct">—</div></div>
             <div class="stat"><div class="stat-label">Corrections Out</div><div class="stat-val yellow" id="st-corrections">—</div></div>
           </div>
+          <p class="sub" style="margin:0 0 10px">Sell price = cheapest carrier rate × (1 + markup) + customer fuel + pass-through surcharges.
+            Drag the slider and watch the win mix change — <span style="color:var(--green)">green</span> beats their current price,
+            <span style="color:var(--grey)">grey</span> we can match, <span style="color:var(--red)">red</span> their rate wins.</p>
           <div class="pill-bar" id="status-bar"></div>
           <div class="legend" id="status-legend"></div>
           <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
@@ -337,6 +364,11 @@ tr:hover td{background:rgba(91,140,255,.045)}
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
         <h2 style="margin:0">Rate Source Maps</h2>
+        <div style="display:flex;align-items:center;gap:10px;min-width:280px;flex:1;max-width:420px">
+          <span style="font-size:11px;color:var(--muted);font-weight:700;white-space:nowrap">MARKUP</span>
+          <input type="range" id="grid-markup" min="0" max="70" step="0.5" value="5" oninput="onGridMarkup(this.value)" style="flex:1">
+          <span id="grid-markup-label" class="markup-readout" style="font-size:19px;min-width:66px">5.0%</span>
+        </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <div class="tabs-inner" style="margin:0;border:none">
             <button class="tab-btn active" onclick="setGridService('ground_commercial',this)">Ground Comm.</button>
@@ -365,6 +397,9 @@ tr:hover td{background:rgba(91,140,255,.045)}
         <div style="display:flex;gap:4px;flex-wrap:wrap" id="pkg-filters"></div>
         <input type="text" id="pkg-search" placeholder="Search tracking…" style="max-width:200px" oninput="filterPackages()">
       </div>
+      <p class="sub" style="margin:0 0 10px">Every invoice line repriced through your cheapest rate card.
+        Click any row for the full audit trail — exact rate used, fuel, markup, margin formula.
+        Corrections/rebills are flagged ⚠ and excluded from savings.</p>
       <div id="pkg-totals" class="alert alert-blue" style="margin-bottom:8px;display:none"></div>
       <div id="pkg-table-wrap" class="table-wrap"></div>
       <div id="pkg-pagination" style="display:flex;gap:4px;justify-content:center;margin-top:8px"></div>
@@ -494,6 +529,8 @@ tr:hover td{background:rgba(91,140,255,.045)}
 function u16(b,o){return b[o]|(b[o+1]<<8)}
 function u32(b,o){return(b[o]|(b[o+1]<<8)|(b[o+2]<<16)|(b[o+3]<<24))>>>0}
 const _td = new TextDecoder();
+function xmlDecode(s){return s.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"')
+  .replace(/&apos;/g,"'").replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(+n)).replace(/&amp;/g,'&');}
 
 async function parseXLSX(file) {
   const ab = await file.arrayBuffer();
@@ -536,7 +573,7 @@ async function parseXLSX(file) {
   const ssXml = await getText('xl/sharedStrings.xml');
   const strings = [];
   for(const m of ssXml.matchAll(/<si>([\s\S]*?)<\/si>/g)){
-    strings.push([...m[1].matchAll(/<t[^>]*>([^<]*)<\/t>/g)].map(x=>x[1]).join(''));
+    strings.push(xmlDecode([...m[1].matchAll(/<t[^>]*>([^<]*)<\/t>/g)].map(x=>x[1]).join('')));
   }
 
   // ── 4. Sheet list from workbook ──────────────────────────────
@@ -562,7 +599,7 @@ async function parseXLSX(file) {
         cells[cm[1]]=strings[parseInt(cm[2])]||'';
       // inline string cells
       for(const cm of rowXml.matchAll(/<c r="([A-Z]+)\d+"[^>]*t="inlineStr"[^>]*>[\s\S]*?<t>([^<]*)<\/t>/g))
-        cells[cm[1]]=cm[2];
+        cells[cm[1]]=xmlDecode(cm[2]);
       // number cells (no t attribute or t="n")
       for(const cm of rowXml.matchAll(/<c r="([A-Z]+)\d+"(?:\s+s="\d+")?><v>([^<]+)<\/v>/g))
         if(!(cm[1] in cells)) cells[cm[1]]=cm[2];
@@ -769,6 +806,135 @@ function parseRateCardSheet(sheetName, rows) {
   return {...rpt, rates};
 }
 
+// ── ACCESSORIAL & FUEL EXTRACTION FROM RATE WORKBOOKS ───────────────────────
+// UPS rate workbooks often carry an "Accessorials" sheet: name in the first
+// text column, list rate next, and sometimes a "Channel Program Rate" column
+// with the negotiated rate. We extract the ones our engine models and offer
+// them as one-click suggestions — never applied silently.
+
+const ACC_PATTERNS=[
+  {key:'das_extended',      re:/area surcharge.*ext|das.*ext|extended.*(area|delivery area)/i},
+  {key:'das',               re:/area surcharge|delivery area/i},
+  {key:'residential',       re:/residential surcharge|resi surcharge/i},
+  {key:'address_correction',re:/address correction/i},
+  {key:'additional_handling',re:/additional handling/i},
+];
+
+function extractAccessorials(sheets, cardName){
+  const found={};
+  for(const sheet of sheets){
+    if(!/accessorial|surcharge/i.test(sheet.name)) continue;
+    for(const rn of Object.keys(sheet.rows)){
+      const row=sheet.rows[rn];
+      const cols=Object.keys(row).sort((a,b)=>colToIdx(a)-colToIdx(b));
+      let label=null;
+      for(const c of cols){
+        const v=String(row[c]);
+        if(isNaN(parseFloat(v))&&v.trim().length>3){label=v.trim();break;}
+      }
+      if(!label) continue;
+      const nums=cols.map(c=>parseFloat(row[c])).filter(v=>!isNaN(v)&&v>0&&v<300);
+      if(!nums.length) continue;
+      for(const {key,re} of ACC_PATTERNS){
+        if(re.test(label)&&!found[key]){
+          // first numeric = list rate; last = channel/negotiated rate when present
+          found[key]={label:label.replace(/^[\s-]+/,''),list:+nums[0].toFixed(2),
+            our:+nums[nums.length-1].toFixed(2),sheet:sheet.name,card:cardName};
+          break;
+        }
+      }
+    }
+  }
+  return found;
+}
+
+function extractFuelMentions(sheets, cardName){
+  const hits=[];
+  const seen=new Set();
+  for(const sheet of sheets){
+    for(const rn of Object.keys(sheet.rows)){
+      const row=sheet.rows[rn];
+      for(const [c,v] of Object.entries(row)){
+        const s=String(v);
+        if(!/\bfsc\b|fuel surcharge/i.test(s)) continue;
+        const label=s.trim().slice(0,42);
+        if(seen.has(label)) continue;
+        seen.add(label);
+        // FSC discount sits to the RIGHT of the label as a fraction (e.g. 0.27 = 27% off
+        // published). Only accept that shape — anything else is a column index/count.
+        let pct=null;
+        const after=Object.entries(row).filter(([cc])=>colToIdx(cc)>colToIdx(c))
+          .sort((a,b)=>colToIdx(a[0])-colToIdx(b[0]));
+        for(const [,vv] of after){
+          const n=parseFloat(vv);
+          if(isNaN(n)) continue;
+          if(n>0&&n<0.9) pct=+(n*100).toFixed(1);
+          break; // first numeric decides; don't keep guessing
+        }
+        hits.push({label,pct,sheet:sheet.name,card:cardName});
+        if(hits.length>=3) return hits;
+      }
+    }
+  }
+  return hits;
+}
+
+function renderAccSuggest(){
+  const el=document.getElementById('acc-suggest');
+  if(!el) return;
+  const sug=state.accSuggestions||{};
+  const keys=Object.keys(sug);
+  if(!keys.length){el.innerHTML='';return;}
+  const LBL={das:'DAS',das_extended:'DAS Extended',residential:'Residential',
+    address_correction:'Addr. Correction',additional_handling:'Add. Handling'};
+  el.innerHTML=`<div class="alert alert-green" style="margin-bottom:10px">
+    <strong>Found in rate sheet (${sug[keys[0]].sheet}):</strong>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
+      ${keys.map(k=>{const s=sug[k];
+        const rates=s.our!==s.list?`list $${s.list} / ours $${s.our}`:`$${s.list}`;
+        return `<span class="suggest-chip">${LBL[k]||k}: ${rates}
+          <button onclick="applyAccSuggestion('${k}')">Apply</button></span>`;}).join('')}
+      <span class="suggest-chip"><button onclick="applyAllAccSuggestions()">Apply All</button></span>
+    </div></div>`;
+}
+
+function applyAccSuggestion(key){
+  const s=(state.accSuggestions||{})[key];
+  if(!s) return;
+  state.accConfig[key]={passthrough:false,our_rate:s.our,cust_rate:s.list};
+  renderAccConfig();
+  toast(`${key.replace('_',' ')}: our $${s.our} / customer $${s.list} (custom mode)`);
+}
+function applyAllAccSuggestions(){
+  Object.keys(state.accSuggestions||{}).forEach(k=>{
+    const s=state.accSuggestions[k];
+    state.accConfig[k]={passthrough:false,our_rate:s.our,cust_rate:s.list};
+  });
+  renderAccConfig();
+  toast('All detected accessorial rates applied (custom mode)');
+}
+
+function renderFuelSuggest(){
+  const el=document.getElementById('fuel-suggest');
+  if(!el) return;
+  const hits=state.fuelMentions||[];
+  if(!hits.length){el.innerHTML='';return;}
+  el.innerHTML=`<div class="alert alert-yellow" style="margin-top:8px">
+    <strong>Fuel references found in rate sheet</strong> — carrier fuel is a weekly index, so we never auto-set it.
+    If these are FSC <em>discounts</em> (% off published), apply to compute Our Fuel from Published:
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
+      ${hits.map((h,i)=>`<span class="suggest-chip">${h.label}${h.pct!=null?` · ${h.pct}%`:''}
+        ${h.pct!=null?`<button onclick="applyFuelDiscount(${h.pct})">Our = Published × (1−${h.pct}%)</button>`:''}</span>`).join('')}
+    </div></div>`;
+}
+function applyFuelDiscount(pct){
+  const pub=parseFloat(document.getElementById('pub-fuel').value)||0;
+  const our=+(pub*(1-pct/100)).toFixed(2);
+  document.getElementById('our-fuel').value=our;
+  updateFuelSpread();
+  toast(`Our Fuel set to ${our}% (published ${pub}% − ${pct}% FSC incentive)`);
+}
+
 // ── INVOICE PARSER ──────────────────────────────────────────────────────────
 // Handles FedEx/UPS format with column-header auto-detection
 // Also handles the specific FedEx export format seen in invoices.xlsx
@@ -947,6 +1113,7 @@ const state = {
   gridService:'ground_commercial', gridView:'sell',
   pkgFilter:'all', pkgPage:0,
   selectedCardIds:new Set(), accConfig:{},
+  accSuggestions:{}, fuelMentions:[],
 };
 const PKG_PAGE = 100;
 const ZONES=[2,3,4,5,6,7,8];
@@ -1069,10 +1236,25 @@ async function handleRCUpload(input){
         if(svcOverride!=='auto') result.serviceType=svcOverride;
         parsed.push(result);
       }
+
+      // Mine the skipped accessorial/surcharge/incentive sheets for usable rates
+      const accFound=extractAccessorials(sheets, name);
+      if(Object.keys(accFound).length){
+        state.accSuggestions=Object.assign(state.accSuggestions||{}, accFound);
+        renderAccSuggest(); renderAccConfig();
+      }
+      const fuelHits=extractFuelMentions(sheets, name);
+      if(fuelHits.length){
+        state.fuelMentions=fuelHits;
+        renderFuelSuggest();
+      }
     }
 
     // Render parse report
     document.getElementById('rc-parse-report').innerHTML = buildRCParseReport(file.name, allReports);
+    const nAcc=Object.keys(state.accSuggestions||{}).length;
+    if(nAcc) document.getElementById('rc-parse-report').innerHTML +=
+      `<div class="alert alert-green" style="margin-top:8px">⚡ ${nAcc} accessorial rate${nAcc>1?'s':''} detected in this workbook — review them in <strong>Pricing Engine → Accessorial Configuration</strong>.</div>`;
 
     if(!parsed.length){
       setStatus('rc-upload-status',`<div class="alert alert-yellow">⚠ No rate data extracted. See parse report below for details.</div>`);
@@ -1521,6 +1703,21 @@ function onMarkupNum(){
   clearTimeout(_mDebounce);_mDebounce=setTimeout(()=>{if(state.result)runScenario();},500);
 }
 
+// Grid tab markup slider — kept in lockstep with the engine slider
+function onGridMarkup(v){
+  v=parseFloat(v)||0;
+  document.getElementById('grid-markup-label').textContent=v.toFixed(1)+'%';
+  document.getElementById('markup-num').value=v;
+  document.getElementById('markup-slider').value=v;
+  document.getElementById('markup-display').textContent=v.toFixed(1)+'%';
+  clearTimeout(_mDebounce);_mDebounce=setTimeout(()=>{if(state.result)runScenario();},400);
+}
+function syncGridMarkup(){
+  const v=parseFloat(document.getElementById('markup-num').value)||0;
+  const gm=document.getElementById('grid-markup');
+  if(gm){gm.value=Math.min(70,v);document.getElementById('grid-markup-label').textContent=v.toFixed(1)+'%';}
+}
+
 // ── RATE ENGINE ───────────────────────────────────────────────────────────────
 function getRate(rates,weight,zone){
   const weights=Object.keys(rates).map(Number).sort((a,b)=>a-b);
@@ -1700,8 +1897,9 @@ function setGridView(v,btn){
 }
 
 function renderGrid(){
+  syncGridMarkup();
   const cont=document.getElementById('grid-container');
-  if(!state.result){cont.innerHTML='<p class="empty">Run a scenario first.</p>';return;}
+  if(!state.result){cont.innerHTML='<p class="empty">Run a scenario first (Pricing Engine tab) — then every cell here is clickable for an audit.</p>';return;}
   const rsm=state.result.rateSourceMaps[state.gridService]||{};
   const s=state.result.summary;
   const hints={sell:`Sell base = best rate × (1+${s.markup.toFixed(1)}% markup). Click any cell to audit.`,
