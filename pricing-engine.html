@@ -762,6 +762,9 @@ function parseInvoiceSheet(rows){
       weight = Math.ceil(parseFloat(String(g('weight')).replace(/[^\d.]/g,''))||1);
     }
     if(weight<1||weight>999) continue;
+    // Zero-weight rows (letters/adjustments) fall back to 1 lb above — count for the report
+    if(parseFloat(g('weight_use'))===0&&parseFloat(g('weight'))===0)
+      invRpt._zeroWeight=(invRpt._zeroWeight||0)+1;
 
     // Zone: prefer Zone Num (integer), fall back to Pricing Zone
     let zone = parseInt(g('zone'));
@@ -815,6 +818,8 @@ function parseInvoiceSheet(rows){
     tracking:p.tracking,weight:p.weight,zone:p.zone,service:p.service,
     base:p.base_charge,misc:p.misc_charge,total:p.total_charge
   }));
+  if(invRpt._zeroWeight)
+    invRpt.warnings.push(`${invRpt._zeroWeight} rows had weight 0 (letters/adjustments) — priced at 1 lb`);
 
   return {packages, parseReport: invRpt};
 }
@@ -1442,7 +1447,7 @@ function accCost(pkg,side){
     if(!ac||ac.passthrough!==false){total+=amt;continue;}
     total+=side==='cost'?(ac.our_rate||amt):(ac.cust_rate||amt);
   }
-  total+=pkg.declared_value||0;
+  // Note: declared_value is the package's insured value, not a charge — informational only
   return total;
 }
 
