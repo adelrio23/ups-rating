@@ -1744,8 +1744,10 @@ function onMarkupSlider(){
   clearTimeout(_mDebounce);_mDebounce=setTimeout(()=>{if(state.result)runScenario();},500);
 }
 function onMarkupNum(){
-  const v=parseFloat(document.getElementById('markup-num').value)||0;
-  document.getElementById('markup-slider').value=Math.min(70,v);
+  let v=parseFloat(document.getElementById('markup-num').value)||0;
+  v=Math.min(70,Math.max(0,v));
+  document.getElementById('markup-num').value=v;
+  document.getElementById('markup-slider').value=v;
   document.getElementById('markup-display').textContent=v.toFixed(1)+'%';
   clearTimeout(_mDebounce);_mDebounce=setTimeout(()=>{if(state.result)runScenario();},500);
 }
@@ -2006,10 +2008,25 @@ function renderGrid(){
     return 'red-cell';
   };
 
-  const rows=weights.map(w=>{
+  // In sell view: only display rows/cols where customer actually has invoice data
+  const sellWeights=new Set();
+  if(state.gridView==='sell'){
+    Object.keys(benchmarks).forEach(k=>{
+      const [svc,w]=k.split('|');
+      if(svc===state.gridService) sellWeights.add(+w);
+    });
+  }
+  const displayWeights=(state.gridView==='sell'&&sellWeights.size>0)?weights.filter(w=>sellWeights.has(w)):weights;
+
+  const rows=displayWeights.map(w=>{
     const cols=ZONES.map(z=>{
       const cell=rsm[w]?.[z]; const val=getVal(cell);
       if(val==null) return `<td class="grid-cell none-cell">—</td>`;
+      // Sell view: blank cells where customer has no invoice data at this weight/zone
+      if(state.gridView==='sell'){
+        const b=benchmarks[`${state.gridService}|${w}|${z}`];
+        if(!b||b.count<1) return `<td class="grid-cell none-cell" title="No invoice data for W${w} Z${z}">—</td>`;
+      }
       const display=state.gridView==='carrier'?val:fmt$(val);
       const cls=cellCls(w,z,typeof val==='number'?val:0);
       const bKey=`${state.gridService}|${w}|${z}`;
