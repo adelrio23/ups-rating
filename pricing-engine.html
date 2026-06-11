@@ -330,10 +330,13 @@ tr:hover td{background:rgba(91,140,255,.045)}
       <div>
         <div class="card">
           <h3>Markup Engine</h3>
-          <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
-            <span class="markup-readout" id="markup-display">5.0%</span>
-            <input type="range" id="markup-slider" min="0" max="500" step="0.5" value="5" oninput="onMarkupSlider()" style="flex:1">
-            <input type="number" id="markup-num" value="5" min="0" step="0.1" style="width:72px" oninput="onMarkupNum()">
+          <div style="margin-bottom:14px">
+            <div style="display:flex;align-items:center;gap:14px;margin-bottom:4px">
+              <span class="markup-readout" id="markup-display">5.0%</span>
+              <input type="range" id="markup-slider" min="0" max="500" step="0.5" value="5" oninput="onMarkupSlider()" style="flex:1">
+              <input type="number" id="markup-num" value="5" min="0" step="0.1" style="width:72px" oninput="onMarkupNum()">
+            </div>
+            <div id="markup-context" style="font-size:12px;color:var(--muted);text-align:center;min-height:16px"></div>
           </div>
           <div id="summary-stats" class="stat-grid" style="margin-bottom:14px">
             <div class="stat"><div class="stat-label">Packages</div><div class="stat-val" id="st-pkgs">—</div></div>
@@ -1945,30 +1948,30 @@ function renderScenarioPlanner(){
   ];
 
   const rows=splits.map(([label,ourPct,note])=>{
+    const custPct=100-ourPct;
     const ourMar=honestD*(ourPct/100);
-    const custSav=honestD*(1-ourPct/100);
+    const custSav=honestD*(custPct/100);
     // Solve for the markup that produces this margin on our actual sell math
     const m=_solveMarkup(p, p.costMo+ourMar);
     const isCur=Math.abs(m-p.curMarkup)<0.3;
 
     const savCell=custSav<0.01
       ?`<span style="color:var(--muted)">—</span>`
-      :`<strong style="color:var(--green)">${fmt$(custSav)}/mo</strong>`;
+      :`<span style="color:var(--green);font-size:15px;font-weight:800;font-variant-numeric:tabular-nums">${fmt$(custSav)}/mo</span>`;
     const marCell=ourMar<0.01
       ?`<span style="color:var(--muted)">—</span>`
-      :`<strong style="color:var(--blue)">${fmt$(ourMar)}/mo</strong>`;
+      :`<span style="color:var(--blue);font-size:15px;font-weight:800;font-variant-numeric:tabular-nums">${fmt$(ourMar)}/mo</span>`;
 
-    const highlight=isCur?'background:rgba(91,140,255,.10);':'';
     const curBadge=isCur
       ?` <span style="font-size:10px;background:var(--blue);color:#fff;border-radius:4px;padding:1px 5px;vertical-align:middle">current</span>`:'';
     const noteTxt=note?`<br><span style="font-size:10px;color:var(--muted)">${note}</span>`:'';
+    const splitBar=`<div class="split-bar"><div class="split-bar-cust" style="width:${custPct}%"></div><div class="split-bar-us" style="width:${ourPct}%"></div></div>`;
 
-    return `<tr style="${highlight}">
-      <td style="padding:7px 10px 7px 8px;font-size:12px;line-height:1.4">${label}${curBadge}${noteTxt}</td>
-      <td style="padding:7px 8px;font-size:12px;text-align:right;font-weight:700">${m.toFixed(1)}%</td>
-      <td style="padding:7px 8px;font-size:12px;text-align:right">${savCell}</td>
-      <td style="padding:7px 8px;font-size:12px;text-align:right">${marCell}</td>
-      <td style="padding:7px 8px 7px 4px;text-align:right">
+    return `<tr class="scenario-row${isCur?' is-current':''}">
+      <td style="font-size:12px;line-height:1.4">${label}${curBadge}${noteTxt}${splitBar}</td>
+      <td style="text-align:right">${savCell}</td>
+      <td style="text-align:right">${marCell}</td>
+      <td style="text-align:right">
         <button class="btn btn-ghost" style="padding:3px 10px;font-size:11px"
           onclick="applyScenarioMarkup(${m.toFixed(3)})">Apply</button>
       </td>
@@ -1978,7 +1981,6 @@ function renderScenarioPlanner(){
   tableEl.innerHTML=caveatHtml+`<table style="width:100%;border-collapse:collapse">
     <thead><tr style="border-bottom:1px solid rgba(255,255,255,.08)">
       <th style="padding:5px 10px 5px 8px;font-size:11px;color:var(--muted);text-align:left;font-weight:600">Scenario</th>
-      <th style="padding:5px 8px;font-size:11px;color:var(--muted);text-align:right;font-weight:600">Markup</th>
       <th style="padding:5px 8px;font-size:11px;color:var(--muted);text-align:right;font-weight:600">Cust Saves/Mo</th>
       <th style="padding:5px 8px;font-size:11px;color:var(--muted);text-align:right;font-weight:600">Our Margin/Mo</th>
       <th></th>
@@ -2189,6 +2191,9 @@ function updateSummaryUI(s){
   document.getElementById('st-margin').textContent=fmtK(s.marginMonthly);
   document.getElementById('st-marginpct').textContent=fmtPct(s.marginPct);
   document.getElementById('st-corrections').textContent=s.corrections;
+
+  const ctxEl=document.getElementById('markup-context');
+  if(ctxEl) ctxEl.textContent=s.marginMonthly?`→ ${fmtK(s.marginMonthly)}/mo margin`:'';
 
   const tot=s.green+s.grey+s.red+s.noRate;
   const pct=n=>tot>0?(n/tot*100).toFixed(1):0;
