@@ -1893,9 +1893,13 @@ function _deltaParams(){
   const A=pkgs.reduce((a,p)=>a+p.bestRate*(1+cf/100),0);
   const B=pkgs.reduce((a,p)=>a+(p.sellTotal-p.bestRate*(1+curM/100)*(1+cf/100)),0);
   if(A<=0) return null;
-  const curMarkup=s.markup;
-  return {A,B,mult,custMo:s.custMonthly,costMo:s.costMonthly,
-    totalDelta:s.custMonthly-s.costMonthly, curMarkup};
+  return {A,B,mult,
+    custMo:s.custMonthly,   // FedEx all-in (freight + fuel + ALL surcharges)
+    costMo:s.costMonthly,   // our UPS cost (freight + fuel only, no surcharges)
+    miscMo:s.miscMonthly||0, // FedEx surcharges bundled in custMo (residential, DAS, etc.)
+    freightCustMo:s.freightCustMonthly||0, // FedEx base freight only
+    totalDelta:s.custMonthly-s.costMonthly,
+    curMarkup:s.markup};
 }
 
 // Solve: given target monthly sell, what markup is needed?
@@ -1913,45 +1917,66 @@ function renderScenarioPlanner(){
   if(!p){el.style.display='none';return;}
   el.style.display='';
 
-  const D=p.totalDelta;
-  if(deltaEl) deltaEl.textContent=`Total delta: ${fmt$(D)}/mo`;
+  const D=p.totalDelta;       // FedEx all-in vs our UPS freight+fuel — GROSS delta
+  const misc=p.miscMo||0;     // FedEx surcharges inside that delta (residential, DAS, etc.)
+  // These surcharges will also apply on UPS → subtract them for a realistic savings estimate
+  // "Honest delta" = what the customer would actually net after UPS charges the same surcharges
+  const honestD=Math.max(0, D-misc);
+
+  if(deltaEl) deltaEl.textContent=`Gross delta: ${fmt$(D)}/mo`;
 
   if(D<=0){
     tableEl.innerHTML=`<p class="sub" style="margin:0;color:var(--red)">No positive delta — our carrier cost exceeds customer's current spend at this rate profile.</p>`;
     return;
   }
 
-  // Pre-defined splits: [label, our%, badge]
+  // Caveat banner — only show if surcharges are a meaningful part of the delta
+  const miscPct=D>0?misc/D*100:0;
+  const caveatHtml=miscPct>10?`
+    <div class="alert alert-yellow" style="margin-bottom:10px;line-height:1.6">
+      <strong>Heads up on the numbers:</strong>
+      FedEx's all-in total includes <strong>${fmt$(misc)}/mo</strong> of surcharges
+      (residential delivery, delivery area, address correction, etc.) — ${miscPct.toFixed(0)}% of the gross delta.
+      UPS charges similar fees for the same package profile, so that portion doesn't represent real savings.
+      <br>
+      <strong>Honest freight advantage (what you can actually pitch): ${fmt$(honestD)}/mo</strong>
+      — that's the pure rate + fuel differential on the same lanes.
+    </div>`:'';
+
+  // Splits are off the HONEST delta (real freight advantage), not the inflated gross
+  // This means every row shows what the customer actually nets after UPS surcharges
   const splits=[
-    ['Max our margin — all delta to us',      100, 'us'],
-    ['80 / 20 — strong margin',                80, ''],
-    ['60 / 40 — balanced, margin-first',       60, ''],
-    ['50 / 50 — even split',                   50, 'balanced'],
-    ['40 / 60 — balanced, savings-first',      40, ''],
-    ['20 / 80 — strong savings pitch',         20, ''],
-    ['Max cust savings — all delta to them',    0, 'cust'],
+    ['Max our margin',              100, 'Keep all freight advantage as margin'],
+    ['80 / 20 — margin-first',      80,  ''],
+    ['60 / 40 — balanced',          60,  ''],
+    ['50 / 50 — even split',        50,  ''],
+    ['40 / 60 — savings-first',     40,  ''],
+    ['20 / 80 — strong pitch',      20,  ''],
+    ['Max cust savings',             0,  'Give all freight advantage to customer'],
   ];
 
-  const rows=splits.map(([label,ourPct,badge])=>{
-    const ourMar=D*(ourPct/100);
-    const custSav=D*(1-ourPct/100);
+  const rows=splits.map(([label,ourPct,note])=>{
+    const ourMar=honestD*(ourPct/100);
+    const custSav=honestD*(1-ourPct/100);
+    // Solve for the markup that produces this margin on our actual sell math
     const m=_solveMarkup(p, p.costMo+ourMar);
     const isCur=Math.abs(m-p.curMarkup)<0.3;
 
     const savCell=custSav<0.01
-      ? `<span style="color:var(--muted)">—</span>`
-      : `<strong style="color:var(--green)">${fmt$(custSav)}/mo</strong>`;
+      ?`<span style="color:var(--muted)">—</span>`
+      :`<strong style="color:var(--green)">${fmt$(custSav)}/mo</strong>`;
     const marCell=ourMar<0.01
-      ? `<span style="color:var(--muted)">—</span>`
-      : `<strong style="color:var(--blue)">${fmt$(ourMar)}/mo</strong>`;
-    const muCell=`<span style="font-weight:700">${m.toFixed(1)}%</span>`;
+      ?`<span style="color:var(--muted)">—</span>`
+      :`<strong style="color:var(--blue)">${fmt$(ourMar)}/mo</strong>`;
 
     const highlight=isCur?'background:rgba(91,140,255,.10);':'';
-    const curBadge=isCur?` <span style="font-size:10px;background:var(--blue);color:#fff;border-radius:4px;padding:1px 5px;vertical-align:middle">current</span>`:'';
+    const curBadge=isCur
+      ?` <span style="font-size:10px;background:var(--blue);color:#fff;border-radius:4px;padding:1px 5px;vertical-align:middle">current</span>`:'';
+    const noteTxt=note?`<br><span style="font-size:10px;color:var(--muted)">${note}</span>`:'';
 
     return `<tr style="${highlight}">
-      <td style="padding:7px 10px 7px 8px;font-size:12px">${label}${curBadge}</td>
-      <td style="padding:7px 8px;font-size:12px;text-align:right">${muCell}</td>
+      <td style="padding:7px 10px 7px 8px;font-size:12px;line-height:1.4">${label}${curBadge}${noteTxt}</td>
+      <td style="padding:7px 8px;font-size:12px;text-align:right;font-weight:700">${m.toFixed(1)}%</td>
       <td style="padding:7px 8px;font-size:12px;text-align:right">${savCell}</td>
       <td style="padding:7px 8px;font-size:12px;text-align:right">${marCell}</td>
       <td style="padding:7px 8px 7px 4px;text-align:right">
@@ -1961,7 +1986,7 @@ function renderScenarioPlanner(){
     </tr>`;
   }).join('');
 
-  tableEl.innerHTML=`<table style="width:100%;border-collapse:collapse">
+  tableEl.innerHTML=caveatHtml+`<table style="width:100%;border-collapse:collapse">
     <thead><tr style="border-bottom:1px solid rgba(255,255,255,.08)">
       <th style="padding:5px 10px 5px 8px;font-size:11px;color:var(--muted);text-align:left;font-weight:600">Scenario</th>
       <th style="padding:5px 8px;font-size:11px;color:var(--muted);text-align:right;font-weight:600">Markup</th>
@@ -1970,7 +1995,8 @@ function renderScenarioPlanner(){
       <th></th>
     </tr></thead>
     <tbody>${rows}</tbody>
-  </table>`;
+  </table>
+  <p class="sub" style="margin:8px 0 0">Numbers based on the honest freight+fuel rate differential (gross delta minus FedEx surcharges that UPS will also charge).</p>`;
 }
 
 function applyScenarioMarkup(m){
@@ -2114,12 +2140,19 @@ function runScenario(){
   const custT=sum(active,'custTotal'), sellT=sum(active,'sellTotal');
   const costT=sum(active,'ourCostTotal'), savingsT=sum(green,'custSavings');
   const marginT=sum(active,'margin');
+  // FedEx misc = residential + DAS + address correction + all other carrier surcharges
+  // These will also apply on UPS for the same package profile — NOT real savings
+  const miscT=sum(active,'misc_charge');
+  // Honest freight delta: FedEx base freight only vs our UPS sell (apples-to-apples rate comparison)
+  const freightCustT=sum(active,'base_charge');
 
   const summary={total:active.length,green:green.length,grey:grey.length,red:red.length,
     noRate:noRate.length,corrections:packages.length-active.length,
     custMonthly:custT*mult,sellMonthly:sellT*mult,costMonthly:costT*mult,
     savingsMonthly:savingsT*mult,marginMonthly:marginT*mult,
     marginPct:sellT>0?marginT/sellT*100:0,
+    miscMonthly:miscT*mult,         // surcharges in FedEx total that UPS will also charge
+    freightCustMonthly:freightCustT*mult, // FedEx base freight only (post-discount, pre-surcharge)
     markup,ourFuel,custFuel,mult,fuelSpread:custFuel-ourFuel};
 
   state.result={summary,packages,rateSourceMaps:rsms};
