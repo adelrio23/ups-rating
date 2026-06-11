@@ -465,6 +465,9 @@ async function parseXLSX(file) {
 // (any prefix where the last digit 2-8 maps to zone 2-8).
 // Returns: { serviceType, rates, report } where report describes parsing decisions.
 
+function colToIdx(c){let n=0;for(const ch of c)n=n*26+ch.charCodeAt(0)-64;return n;}
+function idxToCol(n){let s='';while(n>0){const r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26);}return s;}
+
 function detectZoneHeadersInRow(row) {
   const entries = [];
   for(const [col, val] of Object.entries(row)){
@@ -508,22 +511,32 @@ function parseRateCardSheet(sheetName, rows) {
   };
 
   // ── 1. Service type detection from sheet name ────────────────────────────
-  if(sheetLow.includes('resi')||sheetLow.includes('residential')||sheetLow.includes('home delivery'))
-    rpt.serviceType = 'ground_residential';
-  else if(sheetLow.includes('saver')||sheetLow.includes('1da')||
-          sheetLow.includes('next day')||/\bnda\b/.test(sheetLow)||sheetLow.includes('overnight'))
-    rpt.serviceType = 'nda';
-  else if(sheetLow.includes('2da')||sheetLow.includes('2nd day')||sheetLow.includes('2day')||
-          sheetLow.includes('second day')||/\b2 day\b/.test(sheetLow)||sheetLow.includes('2day am'))
-    rpt.serviceType = '2da';
-  else if(sheetLow.includes('3 day')||sheetLow.includes('3ds')||sheetLow.includes('surepost')||
-          sheetLow.includes('sure post')||sheetLow.includes('cwt')||sheetLow.includes('hundredweight')||
-          sheetLow==='incentives'||sheetLow==='sheet4'||sheetLow.includes('surcharge')||
-          sheetLow.includes('external link')){
-    rpt.skipped=true; rpt.skipReason='Service type skipped (3DS/CWT/SurePost/Incentives/etc.)';
+  // Skip sheets that aren't core domestic parcel services
+  const SKIP_PATTERNS=['export','import','international','intl','3 day','3ds','surepost','sure post',
+    'ground saver','cwt','hundredweight','incentive','accessorial','cubic','surcharge','external link'];
+  const hitPattern=SKIP_PATTERNS.find(p=>sheetLow.includes(p));
+  if(hitPattern||sheetLow==='sheet4'){
+    rpt.skipped=true;
+    rpt.skipReason=`Not a core domestic service (matched "${hitPattern||'sheet4'}")`;
     return rpt;
+  }
+
+  const isResi = sheetLow.includes('resi')||sheetLow.includes('residential')||sheetLow.includes('home delivery');
+  const isNDA  = sheetLow.includes('next day')||sheetLow.includes('saver')||sheetLow.includes('1da')||
+                 /\bnda\b/.test(sheetLow)||sheetLow.includes('overnight');
+  const is2DA  = sheetLow.includes('2da')||sheetLow.includes('2nd day')||sheetLow.includes('2day')||
+                 sheetLow.includes('second day')||/\b2 day\b/.test(sheetLow);
+
+  if(isNDA){
+    if(isResi){ rpt.skipped=true; rpt.skipReason='Air residential variant — NDA pricing uses the commercial chart'; return rpt; }
+    rpt.serviceType='nda';
+  } else if(is2DA){
+    if(isResi){ rpt.skipped=true; rpt.skipReason='Air residential variant — 2DA pricing uses the commercial chart'; return rpt; }
+    rpt.serviceType='2da';
+  } else if(isResi){
+    rpt.serviceType='ground_residential';
   } else {
-    rpt.serviceType = 'ground_commercial';
+    rpt.serviceType='ground_commercial';
   }
 
   // ── 2. Find zone header row ──────────────────────────────────────────────
@@ -574,12 +587,50 @@ function parseRateCardSheet(sheetName, rows) {
     return rpt;
   }
 
-  // ── 4. Extract rates ─────────────────────────────────────────────────────
+  // ── 4. Find weight column ────────────────────────────────────────────────
+  // Weight can be in col A (ground sheets) or col B with a "Lbs." header (air sheets).
+  let weightCol = null;
+
+  // 4a. Header cell that says Lbs/Weight
+  for(const [col,val] of Object.entries(rows[headerRow]||{})){
+    if(/^(lbs\.?|lb\.?|weight|wgt)\b/i.test(String(val).trim()) && !(Object.values(zoneColMap).includes(col))){
+      weightCol=col;
+      rpt.detectMethod+=` · weight col ${col} ("${String(val).trim()}" header)`;
+      break;
+    }
+  }
+
+  // 4b. Score candidates: col left of first zone col, A, B — count rows with int 1–150
+  if(!weightCol){
+    const zIdx=Object.values(zoneColMap).map(colToIdx).sort((a,b)=>a-b);
+    const leftCol=idxToCol(Math.max(1,zIdx[0]-1));
+    const candidates=[...new Set([leftCol,'A','B'])].filter(c=>!Object.values(zoneColMap).includes(c));
+    let bestScore=0;
+    for(const c of candidates){
+      let score=0;
+      for(const rn of allRows){
+        if(rn<=headerRow) continue;
+        const v=rows[rn][c]; if(!v) continue;
+        const f=parseFloat(v), w=Math.round(f);
+        if(!isNaN(f)&&Math.abs(f-w)<0.001&&w>=1&&w<=150) score++;
+      }
+      if(score>bestScore){bestScore=score;weightCol=c;}
+    }
+    if(bestScore<3){
+      rpt.skipped=true;
+      rpt.skipReason='Could not find a weight column (no column with integer weights 1–150 after the zone header)';
+      return rpt;
+    }
+    rpt.detectMethod+=` · weight col ${weightCol} (${bestScore} weight rows)`;
+  }
+  rpt.weightCol=weightCol;
+
+  // ── 5. Extract rates ─────────────────────────────────────────────────────
   const rates = {};
   for(const rn of allRows){
     if(rn<=headerRow) continue;
     const row=rows[rn];
-    const rawW=row['A']; if(!rawW) continue;
+    const rawW=row[weightCol]; if(!rawW) continue;
     const wStr=String(rawW).trim();
     if(wStr.toLowerCase()==='all') continue; // skip "All" minimum row
     const w=parseInt(wStr);
@@ -1059,7 +1110,13 @@ function sniffFileType(sheets) {
 
   if(rcSheets>0&&invSheets===0) return {type:'rate_card',confidence:'high',sheets:rcNames};
   if(invSheets>0&&rcSheets===0) return {type:'invoice',confidence:'high',sheets:invNames};
-  if(rcSheets>0&&invSheets>0)   return {type:'mixed',confidence:'medium',rcSheets:rcNames,invSheets:invNames};
+  if(rcSheets>0&&invSheets>0){
+    // Both signals present — decide by clear majority (rate workbooks often have a
+    // stray surcharge/accessorial sheet with charge-like words)
+    if(rcSheets>=invSheets*3) return {type:'rate_card',confidence:'medium',sheets:rcNames};
+    if(invSheets>=rcSheets*3) return {type:'invoice',confidence:'medium',sheets:invNames};
+    return {type:'mixed',confidence:'medium',rcSheets:rcNames,invSheets:invNames};
+  }
   return {type:'unknown',confidence:'low',sheets:sheets.map(s=>s.name)};
 }
 
