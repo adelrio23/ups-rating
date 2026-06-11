@@ -343,9 +343,9 @@ tr:hover td{background:rgba(91,140,255,.045)}
             <div class="stat"><div class="stat-label">Margin %</div><div class="stat-val blue" id="st-marginpct">—</div></div>
             <div class="stat"><div class="stat-label">Corrections Out</div><div class="stat-val yellow" id="st-corrections">—</div></div>
           </div>
-          <p class="sub" style="margin:0 0 10px">Sell price = cheapest carrier rate × (1 + markup) + customer fuel + pass-through surcharges.
-            Drag the slider and watch the win mix change — <span style="color:var(--green)">green</span> beats their current price,
-            <span style="color:var(--grey)">grey</span> we can match, <span style="color:var(--red)">red</span> their rate wins.</p>
+          <p class="sub" style="margin:0 0 10px">Sell price = cheapest carrier rate × (1 + markup) × (1 + customer fuel%). Compared against their all-in invoice total.
+            <span style="color:var(--green)">Green</span> = we beat their all-in price on freight — <span style="color:var(--grey)">grey</span> = we match at cost — <span style="color:var(--red)">red</span> = their rate wins outright.
+            <em style="color:var(--faint)">Carrier-side surcharges (residential, DAS, etc.) apply on top of sell and will reduce savings modestly.</em></p>
           <div class="pill-bar" id="status-bar"></div>
           <div class="legend" id="status-legend"></div>
           <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
@@ -898,12 +898,12 @@ function renderAccSuggest(){
     </div></div>`;
 }
 
-function applyAccSuggestion(key){
+function applyAccSuggestion(key,silent=false){
   const s=(state.accSuggestions||{})[key];
   if(!s) return;
   state.accConfig[key]={passthrough:false,our_rate:s.our,cust_rate:s.list};
   renderAccConfig();
-  toast(`${key.replace('_',' ')}: our $${s.our} / customer $${s.list} (custom mode)`);
+  if(!silent) toast(`${key.replace('_',' ')}: our $${s.our} / customer $${s.list} (custom mode)`);
 }
 function applyAllAccSuggestions(){
   Object.keys(state.accSuggestions||{}).forEach(k=>{
@@ -1237,15 +1237,20 @@ async function handleRCUpload(input){
         parsed.push(result);
       }
 
-      // Mine the skipped accessorial/surcharge/incentive sheets for usable rates
+      // Mine the skipped accessorial/surcharge/incentive sheets for usable rates — auto-apply
       const accFound=extractAccessorials(sheets, name);
       if(Object.keys(accFound).length){
         state.accSuggestions=Object.assign(state.accSuggestions||{}, accFound);
+        // Auto-apply every detected accessorial
+        Object.keys(accFound).forEach(k=>applyAccSuggestion(k,true));
         renderAccSuggest(); renderAccConfig();
       }
       const fuelHits=extractFuelMentions(sheets, name);
       if(fuelHits.length){
         state.fuelMentions=fuelHits;
+        // Auto-apply the first FSC discount found
+        const hit=fuelHits.find(h=>h.pct!=null);
+        if(hit) applyFuelDiscount(hit.pct);
         renderFuelSuggest();
       }
     }
@@ -1253,8 +1258,14 @@ async function handleRCUpload(input){
     // Render parse report
     document.getElementById('rc-parse-report').innerHTML = buildRCParseReport(file.name, allReports);
     const nAcc=Object.keys(state.accSuggestions||{}).length;
-    if(nAcc) document.getElementById('rc-parse-report').innerHTML +=
-      `<div class="alert alert-green" style="margin-top:8px">⚡ ${nAcc} accessorial rate${nAcc>1?'s':''} detected in this workbook — review them in <strong>Pricing Engine → Accessorial Configuration</strong>.</div>`;
+    const fuelApplied=state.fuelMentions?.find(h=>h.pct!=null);
+    if(nAcc||fuelApplied){
+      const parts=[];
+      if(nAcc) parts.push(`${nAcc} accessorial rate${nAcc>1?'s':''} auto-applied`);
+      if(fuelApplied) parts.push(`FSC fuel discount (${fuelApplied.pct}%) auto-applied → Our Fuel updated`);
+      document.getElementById('rc-parse-report').innerHTML +=
+        `<div class="alert alert-green" style="margin-top:8px">⚡ ${parts.join(' · ')}. Review in <strong>Pricing Engine → Accessorial Configuration</strong>.</div>`;
+    }
 
     if(!parsed.length){
       setStatus('rc-upload-status',`<div class="alert alert-yellow">⚠ No rate data extracted. See parse report below for details.</div>`);
@@ -1768,10 +1779,10 @@ function pricePackage(pkg,rsm,ourFuel,custFuel,markup){
   const w=Math.round(pkg.weight),z=pkg.zone;
   const cell=rsm[w]?.[z];
 
-  // Misc (fuel+surcharges bundled) — pass through both sides
-  const misc=pkg.misc_charge||0;
+  const misc=pkg.misc_charge||0;  // FedEx/carrier misc — kept for audit only, not passed to our sell
   const accOur=accCost(pkg,'cost');
   const accSell=accCost(pkg,'sell');
+  // custTotal = what they actually pay their carrier (freight + fuel + all surcharges)
   const custTotal=pkg.total_charge||(pkg.base_charge+misc);
 
   const audit={weight:w,zone:z,service:pkg.service,markup,ourFuel,custFuel,
@@ -1787,12 +1798,13 @@ function pricePackage(pkg,rsm,ourFuel,custFuel,markup){
 
   const bestRate=cell.rate;
   const ourCostBase=+( bestRate*(1+ourFuel/100) ).toFixed(4);
-  // Our cost total = our freight cost + misc pass-through + other accessorials
-  const ourCostTotal=ourCostBase+misc+accOur;
+  // Our cost = our carrier freight cost + configured accessorials (no FedEx misc pass-through)
+  const ourCostTotal=ourCostBase+accOur;
   const sellBase=+( bestRate*(1+markup/100) ).toFixed(4);
   const sellFuel=+( sellBase*custFuel/100 ).toFixed(4);
-  // Sell total = sell base + sell fuel + misc pass-through + accessorials
-  const sellTotal=sellBase+sellFuel+misc+accSell;
+  // Sell total = our freight sell + our fuel charge + our accessorials
+  // Compared against their carrier's all-in total (custTotal) to show freight savings potential
+  const sellTotal=sellBase+sellFuel+accSell;
   const margin=sellTotal-ourCostTotal;
   const marginPct=sellTotal>0?margin/sellTotal*100:0;
 
@@ -2048,24 +2060,24 @@ function showAudit(idx){
   document.getElementById('audit-body').innerHTML=[
     ['Weight', a.weight||pkg.weight],['Zone', a.zone||pkg.zone||'?'],['Service', a.service||pkg.service],null,
     ['Carrier Rate Used', fmt$(a.bestRate)],['Carrier', a.carrier||pkg.carrier||'—'],null,
-    ['Our Fuel %', fmtPct(a.ourFuel)],['Our Cost Base', fmt$(a.ourCostBase)],
-    ['Misc Pass-through (fuel+surcharges)', fmt$(a.miscCharge)],['Other Accessorials (our cost)', fmt$(a.accOur)],
+    ['Our Fuel %', fmtPct(a.ourFuel)],['Our Cost Base (rate × fuel)', fmt$(a.ourCostBase)],
+    ['Accessorials (our cost)', fmt$(a.accOur)],
     ['Our Cost Total', fmt$(a.ourCostTotal),'var(--blue)'],null,
     ['Markup %', fmtPct(a.markup)],['Sell Base', fmt$(a.sellBase)],
     ['Customer Fuel %', fmtPct(a.custFuel)],['Sell Fuel', fmt$(a.sellFuel)],
-    ['Misc Pass-through (sell)', fmt$(a.miscCharge)],['Other Accessorials (sell)', fmt$(a.accSell)],
-    ['Sell Total', fmt$(a.sellTotal),'var(--green)'],null,
-    ['Their Net Base', fmt$(a.custBase)],['Their Misc/Fuel', fmt$(a.miscCharge)],
-    ['Their Total', fmt$(a.custTotal),'var(--text)'],null,
+    ['Accessorials (sell)', fmt$(a.accSell)],
+    ['Our Sell Total', fmt$(a.sellTotal),'var(--green)'],null,
+    ['Their Net Freight', fmt$(a.custBase)],['Their Misc/Surcharges', fmt$(a.miscCharge)],
+    ['Their All-In Total', fmt$(a.custTotal),'var(--text)'],null,
     ['Margin', fmt$(pkg.margin), pkg.status==='green'?'var(--green)':'var(--red)'],
     ['Margin %', fmtPct(pkg.marginPct)],['Status', (pkg.status||'').toUpperCase()],
   ].map(r=>!r?`<tr><td colspan="2" style="border-top:1px solid #f1f5f9;padding:3px 0"></td></tr>`
     :`<tr class="audit-row"><td style="color:var(--muted)">${r[0]}</td><td style="${r[2]?`color:${r[2]};font-weight:700`:''}">${r[1]}</td></tr>`).join('');
   document.getElementById('audit-formula').innerHTML=
-    `<strong>Formula:</strong> sell total = rate × (1+markup%) + rate × (1+markup%) × cust_fuel% + misc_passthrough<br>
-    <strong>Margin:</strong> sell total − our cost total<br>
-    <strong>GREEN</strong> if sell &lt; their total &nbsp;|&nbsp; <strong>GREY</strong> if our cost &lt; their total &nbsp;|&nbsp; <strong>RED</strong> if our cost ≥ their total<br>
-    <em>Note: misc/fuel from invoice is passed through unchanged on both sides.</em>`;
+    `<strong>Our sell</strong> = rate × (1+markup%) × (1+cust_fuel%) + accessorials<br>
+    <strong>Compared against</strong> their all-in carrier total (freight + fuel + all surcharges)<br>
+    <strong>GREEN</strong> = we beat their all-in on freight &nbsp;|&nbsp; <strong>GREY</strong> = our cost &lt; their total &nbsp;|&nbsp; <strong>RED</strong> = their rate wins<br>
+    <em>Carrier surcharges (residential, DAS, AH) add on top of our sell — configure them in Accessorial Config to see full picture.</em>`;
   document.getElementById('audit-modal').style.display='flex';
 }
 
@@ -2293,7 +2305,7 @@ function exportCSV(type){
       c+=`${(p.base_charge||0).toFixed(2)},${(p.misc_charge||0).toFixed(2)},${(p.custTotal||0).toFixed(2)},`;
       c+=`${p.bestRate||''},${p.carrier||''},${p.ourCostTotal||''},${p.sellBase||''},${p.sellTotal||''},${p.margin||''},${p.status}\n`;
     });
-    c+=`\nBILLING\nSell base + (sell base × ${s.custFuel.toFixed(1)}%) + misc pass-through\n`;
+    c+=`\nBILLING\nSell base × (1 + ${s.custFuel.toFixed(1)}% fuel) + carrier accessorials at configured rates\n`;
     dlText(c,`${name}_internal.csv`);
 
   } else {
