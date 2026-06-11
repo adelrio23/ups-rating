@@ -124,6 +124,8 @@ tr:hover td{background:rgba(91,140,255,.045)}
   white-space:nowrap;font-variant-numeric:tabular-nums;transition:all .1s}
 .grid-cell:hover{background:rgba(91,140,255,.18)!important;transform:scale(1.04)}
 .grid-cell.green-cell{background:rgba(45,212,127,.10);color:#7ce8b1}
+.grid-cell.grey-cell{background:rgba(156,163,175,.07);color:var(--muted)}
+.grid-cell.red-cell{background:rgba(251,94,122,.09);color:#ff9fb0}
 .grid-cell.blue-cell{background:rgba(91,140,255,.10);color:#a8c2ff}
 .grid-cell.none-cell{color:var(--faint);text-align:center}
 .weight-cell{background:rgba(10,16,30,.8);font-weight:700;text-align:center;
@@ -1888,6 +1890,18 @@ function runScenario(){
     markup,ourFuel,custFuel,mult,fuelSpread:custFuel-ourFuel};
 
   state.result={summary,packages,rateSourceMaps:rsms};
+
+  // Build benchmark: for each service/weight/zone, track avg customer all-in price
+  // Used by the Rate Grid to color cells green/grey/red accurately
+  const benchmarks={};  // key: `${svc}|${w}|${z}` -> {sum, count}
+  for(const pkg of active){
+    if(!pkg.zone||!pkg.custTotal) continue;
+    const key=`${pkg.service}|${Math.round(pkg.weight)}|${pkg.zone}`;
+    if(!benchmarks[key]) benchmarks[key]={sum:0,count:0};
+    benchmarks[key].sum+=pkg.custTotal;
+    benchmarks[key].count++;
+  }
+  state.result.benchmarks=benchmarks;
   showRunError('');
   updateSummaryUI(summary);
   document.getElementById('run-status').textContent=`Ran ${packages.length} packages · ${new Date().toLocaleTimeString()}`;
@@ -1956,21 +1970,40 @@ function renderGrid(){
   if(!state.result){cont.innerHTML='<p class="empty">Run a scenario first (Pricing Engine tab) — then every cell here is clickable for an audit.</p>';return;}
   const rsm=state.result.rateSourceMaps[state.gridService]||{};
   const s=state.result.summary;
-  const hints={sell:`Sell base = best rate × (1+${s.markup.toFixed(1)}% markup). Click any cell to audit.`,
-    cost:`Our cost = best rate × (1+${s.ourFuel.toFixed(1)}% fuel). Click any cell to audit.`,
-    raw:'Best raw carrier rate. Click any cell to audit.',carrier:'Winning carrier per cell.'};
+  const hints={
+    sell:`Sell = rate × (1+${s.markup.toFixed(1)}% markup) × (1+${s.custFuel.toFixed(1)}% fuel). Green = beats avg customer price · Grey = within 15% · Red = customer wins. Click cell to audit.`,
+    cost:`Our cost = rate × (1+${s.ourFuel.toFixed(1)}% fuel). Click any cell to audit.`,
+    raw:'Best raw carrier rate from selected rate cards. Click any cell to audit.',
+    carrier:'Lowest-cost carrier per weight/zone bucket.',
+  };
   document.getElementById('grid-hint').textContent=hints[state.gridView];
 
   const weights=Object.keys(rsm).map(Number).sort((a,b)=>a-b);
   if(!weights.length){cont.innerHTML='<p class="empty">No rate data for this service with selected cards.</p>';return;}
 
+  const benchmarks=state.result.benchmarks||{};
+
+  const getSell=rate=>rate*(1+s.markup/100)*(1+s.custFuel/100);
+
   const getVal=cell=>{
     if(!cell) return null;
     if(state.gridView==='raw') return cell.rate;
     if(state.gridView==='cost') return cell.rate*(1+s.ourFuel/100);
-    if(state.gridView==='sell') return cell.rate*(1+s.markup/100);
+    if(state.gridView==='sell') return getSell(cell.rate);
     if(state.gridView==='carrier') return cell.carrier;
     return null;
+  };
+
+  // For sell view: color based on actual customer price benchmark for that bucket
+  const cellCls=(w,z,sell)=>{
+    if(state.gridView!=='sell') return state.gridView==='cost'?'blue-cell':'';
+    const key=`${state.gridService}|${w}|${z}`;
+    const b=benchmarks[key];
+    if(!b||b.count<1) return 'grey-cell';  // no data for this bucket
+    const avgCust=b.sum/b.count;
+    if(sell<avgCust) return 'green-cell';
+    if(sell<avgCust*1.15) return 'grey-cell';
+    return 'red-cell';
   };
 
   const rows=weights.map(w=>{
@@ -1978,9 +2011,12 @@ function renderGrid(){
       const cell=rsm[w]?.[z]; const val=getVal(cell);
       if(val==null) return `<td class="grid-cell none-cell">—</td>`;
       const display=state.gridView==='carrier'?val:fmt$(val);
-      const cls=state.gridView==='sell'?'green-cell':state.gridView==='cost'?'blue-cell':'';
+      const cls=cellCls(w,z,typeof val==='number'?val:0);
+      const bKey=`${state.gridService}|${w}|${z}`;
+      const b=benchmarks[bKey];
+      const avgNote=b?` | avg cust $${(b.sum/b.count).toFixed(2)} (${b.count} pkgs)`:'';
       const cellJson=cell?JSON.stringify(cell).replace(/"/g,'&quot;'):'null';
-      return `<td class="grid-cell ${cls}" title="W${w} Z${z}: ${cell?.carrier} $${cell?.rate?.toFixed(4)}"
+      return `<td class="grid-cell ${cls}" title="W${w} Z${z}: ${cell?.carrier} $${cell?.rate?.toFixed(4)}${avgNote}"
         onclick="auditCell(${w},${z},'${state.gridService}',${cellJson})">${display}</td>`;
     }).join('');
     return `<tr><td class="weight-cell">${w}</td>${cols}</tr>`;
@@ -1992,20 +2028,30 @@ function renderGrid(){
 function auditCell(w,z,svc,cell){
   if(!cell||!state.result) return;
   const s=state.result.summary;
-  const ourCost=cell.rate*(1+s.ourFuel/100);
-  const sellBase=cell.rate*(1+s.markup/100);
-  const sellFuel=sellBase*s.custFuel/100;
+  const ourCost=+(cell.rate*(1+s.ourFuel/100)).toFixed(2);
+  const sellBase=+(cell.rate*(1+s.markup/100)).toFixed(2);
+  const sellFuel=+(sellBase*s.custFuel/100).toFixed(2);
+  const sellTotal=sellBase+sellFuel;
+  const b=(state.result.benchmarks||{})[`${svc}|${w}|${z}`];
+  const avgCust=b?b.sum/b.count:null;
+  const status=avgCust==null?'no data':sellTotal<avgCust?'GREEN — we beat avg customer price':sellTotal<avgCust*1.15?'GREY — within 15% of avg customer price':'RED — avg customer price beats us';
   document.getElementById('audit-tracking').textContent=`Cell: Weight ${w} lbs / Zone ${z} / ${SVC_LABELS[svc]||svc}`;
   document.getElementById('audit-body').innerHTML=[
     ['Carrier',cell.carrier,''],['Best Raw Rate',fmt$(cell.rate),''],null,
-    ['Our Fuel %',fmtPct(s.ourFuel),''],['Our Cost Base (rate × fuel)',fmt$(ourCost),'color:var(--blue);font-weight:700'],null,
-    ['Markup %',fmtPct(s.markup),''],['Sell Base (rate × markup)',fmt$(sellBase),'color:var(--green);font-weight:700'],
+    ['Our Fuel %',fmtPct(s.ourFuel),''],['Our Cost (rate × fuel)',fmt$(ourCost),'color:var(--blue);font-weight:700'],null,
+    ['Markup %',fmtPct(s.markup),''],['Sell Base (rate × markup)',fmt$(sellBase),''],
     ['Customer Fuel %',fmtPct(s.custFuel),''],['Sell Fuel',fmt$(sellFuel),''],
-    ['Sell Total (before misc/acc)',fmt$(sellBase+sellFuel),'color:var(--green);font-weight:700'],
+    ['Our Sell Total',fmt$(sellTotal),'color:var(--green);font-weight:700'],null,
+    ...(avgCust!=null?[
+      [`Avg Customer Price (${b.count} pkgs)`,fmt$(avgCust),''],
+      ['Savings vs Avg',fmt$(avgCust-sellTotal),avgCust>sellTotal?'color:var(--green)':'color:var(--red)'],
+      ['Status',status,'font-weight:700'],
+    ]:[['Status','No invoice data for this bucket — run scenario first','color:var(--faint)']]),
   ].map(r=>!r?`<tr><td colspan="2" style="border-top:1px solid #f1f5f9;padding:3px 0"></td></tr>`
     :`<tr class="audit-row"><td style="color:var(--muted)">${r[0]}</td><td style="${r[2]}">${r[1]}</td></tr>`).join('');
   document.getElementById('audit-formula').innerHTML=
-    `sell base = ${fmt$(cell.rate)} × (1+${s.markup.toFixed(1)}%) = ${fmt$(sellBase)}<br>our cost = ${fmt$(cell.rate)} × (1+${s.ourFuel.toFixed(1)}%) = ${fmt$(ourCost)}`;
+    `sell = rate × (1+${s.markup.toFixed(1)}%) × (1+${s.custFuel.toFixed(1)}%) = ${fmt$(sellBase)} + ${fmt$(sellFuel)} fuel = <strong>${fmt$(sellTotal)}</strong><br>`+
+    `cost = rate × (1+${s.ourFuel.toFixed(1)}%) = <strong>${fmt$(ourCost)}</strong>`;
   document.getElementById('audit-modal').style.display='flex';
 }
 
