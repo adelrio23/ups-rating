@@ -375,6 +375,27 @@ tr:hover td{background:rgba(91,140,255,.045)}
                 <span id="opt-result" style="font-size:12px;color:var(--muted)">Run a scenario first, then set targets above.</span>
               </div>
               <div id="opt-detail" style="margin-top:8px;display:none"></div>
+
+              <hr style="border:none;border-top:1px solid rgba(255,255,255,.07);margin:16px 0 12px">
+
+              <!-- Delta Split Calculator -->
+              <div>
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px">
+                  <span style="font-weight:700;font-size:13px;color:var(--blue)">⚖️ Maximize Delta — Split Calculator</span>
+                  <span id="opt-delta-total" style="font-size:11px;color:var(--muted)"></span>
+                </div>
+                <p class="sub" style="margin:0 0 10px">Total delta = customer spend minus our cost. Drag to choose how to split that value — left gives the customer maximum savings, right maximizes your margin.</p>
+                <div style="margin-bottom:8px">
+                  <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px">
+                    <span>← All to customer</span>
+                    <span id="opt-split-label" style="font-weight:700;font-size:12px;color:var(--blue)">50 / 50</span>
+                    <span>All to us →</span>
+                  </div>
+                  <input type="range" id="opt-split-slider" min="0" max="100" step="1" value="50" oninput="updateDeltaPreview()" style="width:100%">
+                </div>
+                <div id="opt-delta-preview" style="font-size:12px;color:var(--muted);min-height:18px;margin-bottom:10px">Run a scenario first to see the delta breakdown.</div>
+                <button class="btn btn-blue" onclick="applyDeltaSplit()" style="font-size:13px;padding:8px 18px">⚖️ Apply This Split</button>
+              </div>
             </div>
           </details>
 
@@ -1885,6 +1906,55 @@ function runOptimizer(){
   runScenario();
 }
 
+// ── DELTA SPLIT CALCULATOR ────────────────────────────────────────────────────
+function _deltaParams(){
+  if(!state.result) return null;
+  const s=state.result.summary;
+  const pkgs=state.result.packages.filter(p=>!p.correction_flag&&p.bestRate!=null&&p.bestRate>0);
+  if(!pkgs.length) return null;
+  const mult=s.mult||1, cf=s.custFuel, curM=s.markup;
+  const A=pkgs.reduce((a,p)=>a+p.bestRate*(1+cf/100),0);
+  const B=pkgs.reduce((a,p)=>a+(p.sellTotal-p.bestRate*(1+curM/100)*(1+cf/100)),0);
+  if(A<=0) return null;
+  return {A,B,mult,custMo:s.custMonthly,costMo:s.costMonthly,totalDelta:s.custMonthly-s.costMonthly};
+}
+
+function updateDeltaPreview(){
+  const ourPct=+(document.getElementById('opt-split-slider')?.value)||50;
+  const custPct=100-ourPct;
+  const labelEl=document.getElementById('opt-split-label');
+  const prevEl=document.getElementById('opt-delta-preview');
+  const totEl=document.getElementById('opt-delta-total');
+  if(labelEl) labelEl.textContent=`${custPct} / ${ourPct}`;
+  const p=_deltaParams();
+  if(!p){if(prevEl)prevEl.textContent='Run a scenario first to see the delta breakdown.';return;}
+  if(totEl) totEl.textContent=`Total delta: ${fmt$(p.totalDelta)}/mo`;
+  if(p.totalDelta<=0){
+    if(prevEl)prevEl.textContent='No positive delta — our cost exceeds customer current spend at this profile.';
+    return;
+  }
+  const custSav=p.totalDelta*(custPct/100);
+  const ourMar=p.totalDelta*(ourPct/100);
+  const m=Math.max(0,((p.costMo+ourMar)/p.mult-p.B)/p.A*100-100);
+  if(prevEl) prevEl.innerHTML=
+    `Customer saves <strong style="color:var(--green)">${fmt$(custSav)}/mo</strong> &nbsp;·&nbsp; `+
+    `We make <strong style="color:var(--blue)">${fmt$(ourMar)}/mo</strong> &nbsp;·&nbsp; `+
+    `Markup: <strong>${m.toFixed(1)}%</strong>`;
+}
+
+function applyDeltaSplit(){
+  const p=_deltaParams();
+  if(!p){toast('Run a scenario first.');return;}
+  if(p.totalDelta<=0){toast('No positive delta to split — check rates.');return;}
+  const ourPct=+(document.getElementById('opt-split-slider')?.value)||50;
+  const ourMar=p.totalDelta*(ourPct/100);
+  const m=Math.max(0,((p.costMo+ourMar)/p.mult-p.B)/p.A*100-100);
+  document.getElementById('markup-num').value=m.toFixed(2);
+  document.getElementById('markup-slider').value=Math.min(m,500);
+  document.getElementById('markup-display').textContent=m.toFixed(1)+'%';
+  runScenario();
+}
+
 // Grid tab markup slider — kept in lockstep with the engine slider
 function onGridMarkup(v){
   v=parseFloat(v)||0;
@@ -2041,6 +2111,7 @@ function runScenario(){
   updateSummaryUI(summary);
   document.getElementById('run-status').textContent=`Ran ${packages.length} packages · ${new Date().toLocaleTimeString()}`;
   renderGrid(); renderPackageTable();
+  updateDeltaPreview();
 }
 
 function showRunError(msg){
