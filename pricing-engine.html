@@ -346,59 +346,6 @@ tr:hover td{background:rgba(91,140,255,.045)}
             <div class="stat"><div class="stat-label">Corrections Out</div><div class="stat-val yellow" id="st-corrections">—</div></div>
           </div>
 
-          <!-- Auto-Optimize -->
-          <details id="opt-panel" style="margin-bottom:14px;border:1px solid rgba(91,140,255,.18);border-radius:10px;padding:0">
-            <summary style="cursor:pointer;font-weight:700;font-size:13px;color:var(--blue);padding:10px 14px;list-style:none;display:flex;align-items:center;gap:8px;user-select:none">
-              <span style="font-size:15px">⚡</span> Auto-Optimize Markup
-              <span class="hint" style="margin:0;font-weight:400;color:var(--muted)">— solve for savings &amp; margin targets automatically</span>
-            </summary>
-            <div style="padding:0 14px 14px">
-              <p class="sub" style="margin:4px 0 10px">Enter one or both targets — the engine solves for the exact markup that hits them, then re-runs the scenario.</p>
-              <div class="two-col" style="gap:10px;margin-bottom:10px">
-                <label class="field">Target Customer Savings/Mo
-                  <span class="hint">How much the customer saves vs their current carrier spend</span>
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <span style="color:var(--muted);font-size:13px;font-weight:700">$</span>
-                    <input type="number" id="opt-savings" min="0" step="100" placeholder="e.g. 2000" style="flex:1">
-                  </div>
-                </label>
-                <label class="field">Target Our Margin/Mo
-                  <span class="hint">Our monthly gross profit (sell minus our carrier cost)</span>
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <span style="color:var(--muted);font-size:13px;font-weight:700">$</span>
-                    <input type="number" id="opt-margin" min="0" step="100" placeholder="e.g. 1500" style="flex:1">
-                  </div>
-                </label>
-              </div>
-              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                <button class="btn btn-blue" onclick="runOptimizer()" style="font-size:13px;padding:8px 18px">⚡ Find &amp; Apply</button>
-                <span id="opt-result" style="font-size:12px;color:var(--muted)">Run a scenario first, then set targets above.</span>
-              </div>
-              <div id="opt-detail" style="margin-top:8px;display:none"></div>
-
-              <hr style="border:none;border-top:1px solid rgba(255,255,255,.07);margin:16px 0 12px">
-
-              <!-- Delta Split Calculator -->
-              <div>
-                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px">
-                  <span style="font-weight:700;font-size:13px;color:var(--blue)">⚖️ Maximize Delta — Split Calculator</span>
-                  <span id="opt-delta-total" style="font-size:11px;color:var(--muted)"></span>
-                </div>
-                <p class="sub" style="margin:0 0 10px">Total delta = customer spend minus our cost. Drag to choose how to split that value — left gives the customer maximum savings, right maximizes your margin.</p>
-                <div style="margin-bottom:8px">
-                  <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px">
-                    <span>← All to customer</span>
-                    <span id="opt-split-label" style="font-weight:700;font-size:12px;color:var(--blue)">50 / 50</span>
-                    <span>All to us →</span>
-                  </div>
-                  <input type="range" id="opt-split-slider" min="0" max="100" step="1" value="50" oninput="updateDeltaPreview()" style="width:100%">
-                </div>
-                <div id="opt-delta-preview" style="font-size:12px;color:var(--muted);min-height:18px;margin-bottom:10px">Run a scenario first to see the delta breakdown.</div>
-                <button class="btn btn-blue" onclick="applyDeltaSplit()" style="font-size:13px;padding:8px 18px">⚖️ Apply This Split</button>
-              </div>
-            </div>
-          </details>
-
           <p class="sub" style="margin:0 0 10px">Sell price = cheapest carrier rate × (1 + markup) × (1 + customer fuel%). Compared against their all-in invoice total.
             <span style="color:var(--green)">Green</span> = we beat their all-in price on freight — <span style="color:var(--grey)">grey</span> = we match at cost — <span style="color:var(--red)">red</span> = their rate wins outright.
             <em style="color:var(--faint)">Carrier-side surcharges (residential, DAS, etc.) apply on top of sell and will reduce savings modestly.</em></p>
@@ -410,6 +357,35 @@ tr:hover td{background:rgba(91,140,255,.045)}
           </div>
           <div id="run-error" style="margin-top:8px"></div>
           <div id="run-status" style="margin-top:6px;font-size:12px;color:var(--muted)"></div>
+        </div>
+
+        <!-- Best Scenarios card — auto-renders after every run, no inputs required -->
+        <div id="scenario-planner" class="card" style="display:none">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+            <h3 style="margin:0">⚡ Best Scenarios</h3>
+            <span id="planner-delta" style="font-size:12px;color:var(--muted)"></span>
+          </div>
+          <p class="sub" style="margin:0 0 10px">Total available delta split different ways — click Apply on any row to set that markup and re-run instantly.</p>
+          <div id="planner-table"></div>
+          <div style="border-top:1px solid rgba(255,255,255,.07);margin-top:12px;padding-top:12px">
+            <p class="sub" style="margin:0 0 8px;font-weight:600;color:var(--text)">Custom target</p>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span style="font-size:12px;color:var(--muted)">Save customer</span>
+              <div style="display:flex;align-items:center;gap:3px">
+                <span style="color:var(--muted);font-size:12px;font-weight:700">$</span>
+                <input type="number" id="opt-savings" min="0" step="100" placeholder="2000" style="width:80px">
+              </div>
+              <span style="font-size:12px;color:var(--muted)">/mo  or  make us</span>
+              <div style="display:flex;align-items:center;gap:3px">
+                <span style="color:var(--muted);font-size:12px;font-weight:700">$</span>
+                <input type="number" id="opt-margin" min="0" step="100" placeholder="1500" style="width:80px">
+              </div>
+              <span style="font-size:12px;color:var(--muted)">/mo</span>
+              <button class="btn btn-blue" onclick="runOptimizer()" style="padding:5px 14px;font-size:12px">Find &amp; Apply</button>
+            </div>
+            <div id="opt-result" style="margin-top:6px;font-size:12px;color:var(--muted)"></div>
+            <div id="opt-detail" style="margin-top:6px;display:none"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -1906,54 +1882,106 @@ function runOptimizer(){
   runScenario();
 }
 
-// ── DELTA SPLIT CALCULATOR ────────────────────────────────────────────────────
+// ── SCENARIO PLANNER ──────────────────────────────────────────────────────────
 function _deltaParams(){
   if(!state.result) return null;
   const s=state.result.summary;
   const pkgs=state.result.packages.filter(p=>!p.correction_flag&&p.bestRate!=null&&p.bestRate>0);
   if(!pkgs.length) return null;
   const mult=s.mult||1, cf=s.custFuel, curM=s.markup;
+  // sell(m) = A×(1+m/100) + B  where A scales with markup, B is fixed acc
   const A=pkgs.reduce((a,p)=>a+p.bestRate*(1+cf/100),0);
   const B=pkgs.reduce((a,p)=>a+(p.sellTotal-p.bestRate*(1+curM/100)*(1+cf/100)),0);
   if(A<=0) return null;
-  return {A,B,mult,custMo:s.custMonthly,costMo:s.costMonthly,totalDelta:s.custMonthly-s.costMonthly};
+  const curMarkup=s.markup;
+  return {A,B,mult,custMo:s.custMonthly,costMo:s.costMonthly,
+    totalDelta:s.custMonthly-s.costMonthly, curMarkup};
 }
 
-function updateDeltaPreview(){
-  const ourPct=+(document.getElementById('opt-split-slider')?.value)||50;
-  const custPct=100-ourPct;
-  const labelEl=document.getElementById('opt-split-label');
-  const prevEl=document.getElementById('opt-delta-preview');
-  const totEl=document.getElementById('opt-delta-total');
-  if(labelEl) labelEl.textContent=`${custPct} / ${ourPct}`;
+// Solve: given target monthly sell, what markup is needed?
+function _solveMarkup(p, targetSellMo){
+  return Math.max(0,(targetSellMo/p.mult-p.B)/p.A*100-100);
+}
+
+function renderScenarioPlanner(){
+  const el=document.getElementById('scenario-planner');
+  const tableEl=document.getElementById('planner-table');
+  const deltaEl=document.getElementById('planner-delta');
+  if(!el) return;
+
   const p=_deltaParams();
-  if(!p){if(prevEl)prevEl.textContent='Run a scenario first to see the delta breakdown.';return;}
-  if(totEl) totEl.textContent=`Total delta: ${fmt$(p.totalDelta)}/mo`;
-  if(p.totalDelta<=0){
-    if(prevEl)prevEl.textContent='No positive delta — our cost exceeds customer current spend at this profile.';
+  if(!p){el.style.display='none';return;}
+  el.style.display='';
+
+  const D=p.totalDelta;
+  if(deltaEl) deltaEl.textContent=`Total delta: ${fmt$(D)}/mo`;
+
+  if(D<=0){
+    tableEl.innerHTML=`<p class="sub" style="margin:0;color:var(--red)">No positive delta — our carrier cost exceeds customer's current spend at this rate profile.</p>`;
     return;
   }
-  const custSav=p.totalDelta*(custPct/100);
-  const ourMar=p.totalDelta*(ourPct/100);
-  const m=Math.max(0,((p.costMo+ourMar)/p.mult-p.B)/p.A*100-100);
-  if(prevEl) prevEl.innerHTML=
-    `Customer saves <strong style="color:var(--green)">${fmt$(custSav)}/mo</strong> &nbsp;·&nbsp; `+
-    `We make <strong style="color:var(--blue)">${fmt$(ourMar)}/mo</strong> &nbsp;·&nbsp; `+
-    `Markup: <strong>${m.toFixed(1)}%</strong>`;
+
+  // Pre-defined splits: [label, our%, badge]
+  const splits=[
+    ['Max our margin — all delta to us',      100, 'us'],
+    ['80 / 20 — strong margin',                80, ''],
+    ['60 / 40 — balanced, margin-first',       60, ''],
+    ['50 / 50 — even split',                   50, 'balanced'],
+    ['40 / 60 — balanced, savings-first',      40, ''],
+    ['20 / 80 — strong savings pitch',         20, ''],
+    ['Max cust savings — all delta to them',    0, 'cust'],
+  ];
+
+  const rows=splits.map(([label,ourPct,badge])=>{
+    const ourMar=D*(ourPct/100);
+    const custSav=D*(1-ourPct/100);
+    const m=_solveMarkup(p, p.costMo+ourMar);
+    const isCur=Math.abs(m-p.curMarkup)<0.3;
+
+    const savCell=custSav<0.01
+      ? `<span style="color:var(--muted)">—</span>`
+      : `<strong style="color:var(--green)">${fmt$(custSav)}/mo</strong>`;
+    const marCell=ourMar<0.01
+      ? `<span style="color:var(--muted)">—</span>`
+      : `<strong style="color:var(--blue)">${fmt$(ourMar)}/mo</strong>`;
+    const muCell=`<span style="font-weight:700">${m.toFixed(1)}%</span>`;
+
+    const highlight=isCur?'background:rgba(91,140,255,.10);':'';
+    const curBadge=isCur?` <span style="font-size:10px;background:var(--blue);color:#fff;border-radius:4px;padding:1px 5px;vertical-align:middle">current</span>`:'';
+
+    return `<tr style="${highlight}">
+      <td style="padding:7px 10px 7px 8px;font-size:12px">${label}${curBadge}</td>
+      <td style="padding:7px 8px;font-size:12px;text-align:right">${muCell}</td>
+      <td style="padding:7px 8px;font-size:12px;text-align:right">${savCell}</td>
+      <td style="padding:7px 8px;font-size:12px;text-align:right">${marCell}</td>
+      <td style="padding:7px 8px 7px 4px;text-align:right">
+        <button class="btn btn-ghost" style="padding:3px 10px;font-size:11px"
+          onclick="applyScenarioMarkup(${m.toFixed(3)})">Apply</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  tableEl.innerHTML=`<table style="width:100%;border-collapse:collapse">
+    <thead><tr style="border-bottom:1px solid rgba(255,255,255,.08)">
+      <th style="padding:5px 10px 5px 8px;font-size:11px;color:var(--muted);text-align:left;font-weight:600">Scenario</th>
+      <th style="padding:5px 8px;font-size:11px;color:var(--muted);text-align:right;font-weight:600">Markup</th>
+      <th style="padding:5px 8px;font-size:11px;color:var(--muted);text-align:right;font-weight:600">Cust Saves/Mo</th>
+      <th style="padding:5px 8px;font-size:11px;color:var(--muted);text-align:right;font-weight:600">Our Margin/Mo</th>
+      <th></th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
 }
 
-function applyDeltaSplit(){
-  const p=_deltaParams();
-  if(!p){toast('Run a scenario first.');return;}
-  if(p.totalDelta<=0){toast('No positive delta to split — check rates.');return;}
-  const ourPct=+(document.getElementById('opt-split-slider')?.value)||50;
-  const ourMar=p.totalDelta*(ourPct/100);
-  const m=Math.max(0,((p.costMo+ourMar)/p.mult-p.B)/p.A*100-100);
+function applyScenarioMarkup(m){
   document.getElementById('markup-num').value=m.toFixed(2);
   document.getElementById('markup-slider').value=Math.min(m,500);
-  document.getElementById('markup-display').textContent=m.toFixed(1)+'%';
+  document.getElementById('markup-display').textContent=(+m).toFixed(1)+'%';
   runScenario();
 }
+
+// kept for custom-target button
+function updateDeltaPreview(){ renderScenarioPlanner(); }
 
 // Grid tab markup slider — kept in lockstep with the engine slider
 function onGridMarkup(v){
@@ -2111,7 +2139,7 @@ function runScenario(){
   updateSummaryUI(summary);
   document.getElementById('run-status').textContent=`Ran ${packages.length} packages · ${new Date().toLocaleTimeString()}`;
   renderGrid(); renderPackageTable();
-  updateDeltaPreview();
+  renderScenarioPlanner();
 }
 
 function showRunError(msg){
