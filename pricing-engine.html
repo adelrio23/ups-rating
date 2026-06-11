@@ -1923,25 +1923,14 @@ function renderScenarioPlanner(){
   // "Honest delta" = what the customer would actually net after UPS charges the same surcharges
   const honestD=Math.max(0, D-misc);
 
-  if(deltaEl) deltaEl.textContent=`Gross delta: ${fmt$(D)}/mo`;
+  if(deltaEl) deltaEl.textContent=`Freight delta: ${fmt$(honestD)}/mo`;
 
   if(D<=0){
     tableEl.innerHTML=`<p class="sub" style="margin:0;color:var(--red)">No positive delta — our carrier cost exceeds customer's current spend at this rate profile.</p>`;
     return;
   }
 
-  // Caveat banner — only show if surcharges are a meaningful part of the delta
-  const miscPct=D>0?misc/D*100:0;
-  const caveatHtml=miscPct>10?`
-    <div class="alert alert-yellow" style="margin-bottom:10px;line-height:1.6">
-      <strong>Heads up on the numbers:</strong>
-      FedEx's all-in total includes <strong>${fmt$(misc)}/mo</strong> of surcharges
-      (residential delivery, delivery area, address correction, etc.) — ${miscPct.toFixed(0)}% of the gross delta.
-      UPS charges similar fees for the same package profile, so that portion doesn't represent real savings.
-      <br>
-      <strong>Honest freight advantage (what you can actually pitch): ${fmt$(honestD)}/mo</strong>
-      — that's the pure rate + fuel differential on the same lanes.
-    </div>`:'';
+  const caveatHtml='';
 
   // Splits are off the HONEST delta (real freight advantage), not the inflated gross
   // This means every row shows what the customer actually nets after UPS surcharges
@@ -1996,7 +1985,7 @@ function renderScenarioPlanner(){
     </tr></thead>
     <tbody>${rows}</tbody>
   </table>
-  <p class="sub" style="margin:8px 0 0">Numbers based on the honest freight+fuel rate differential (gross delta minus FedEx surcharges that UPS will also charge).</p>`;
+  <p class="sub" style="margin:8px 0 0">Surcharges (residential, DAS, etc.) excluded from delta — UPS and FedEx charge similarly for the same package profile, so they cancel out.</p>`;
 }
 
 function applyScenarioMarkup(m){
