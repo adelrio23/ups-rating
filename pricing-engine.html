@@ -300,8 +300,8 @@ tr:hover td{background:rgba(91,140,255,.045)}
           <h3>Volume &amp; Settings</h3>
           <div class="two-col" style="gap:12px;margin-bottom:12px">
             <label class="field">Volume Multiplier
-              <span class="hint">Scale invoice to monthly</span>
-              <input type="number" id="vol-mult" value="1.0" step="0.1" min="0.1">
+              <span class="hint">Scales totals to per-month. Auto-set to 1/N when the invoice file spans N billing months.</span>
+              <input type="number" id="vol-mult" value="1.0" step="0.01" min="0.01">
             </label>
             <label class="field">Scenario Name
               <input type="text" id="scenario-name" placeholder="e.g. ABC Corp v1">
@@ -950,6 +950,8 @@ const INV_ALIASES = {
   misc_charge:  ['shipment miscellaneous charge usd','miscellaneous charge','misc charge','misc'],
   net_charge:   ['net charge amount usd','net charge','total charge','total','invoice amount','net amount'],
   net_excl_misc:['fedex net excluding misc charges','net excluding misc'],
+  invoice_month:['invoice month (yyyymm)','invoice month','billing month'],
+  ship_date:    ['shipment date (mm/dd/yyyy)','shipment date','ship date','pickup date','transaction date'],
   tracking:     ['shipment tracking number','tracking number','tracking #','tracking no','tracking'],
   reference:    ['reference notes line 1','reference','po number','ref'],
   dim_flag:     ['shipment dim flag (y or n)','dim flag','dim'],
@@ -1029,12 +1031,21 @@ function parseInvoiceSheet(rows){
   if(!colMap.base_charge&&!colMap.net_charge) invRpt.warnings.push('No charge column found — totals may be zero');
 
   const packages=[];
+  const monthBuckets={}; // 'YYYYMM' -> pkg count, to detect multi-month files
   for(const rn of allRows){
     if(rn<=headerRow) continue;
     const row=rows[rn];
 
     const g=(f)=>{ const c=colMap[f]; return c?row[c]||'':''; };
     const num=(f)=>{ const v=parseFloat(String(g(f)).replace(/[$,]/g,'')); return isNaN(v)?0:v; };
+
+    // Period detection: invoice month column, else shipment date
+    let moKey=String(g('invoice_month')).trim();
+    if(!/^\d{6}$/.test(moKey)){
+      const dm=String(g('ship_date')).match(/(\d{1,2})\/\d{1,2}\/(\d{4})/);
+      moKey=dm?`${dm[2]}${dm[1].padStart(2,'0')}`:'';
+    }
+    if(moKey) monthBuckets[moKey]=(monthBuckets[moKey]||0)+1;
 
     // Weight: prefer integer billed weight (weight_use/AB), fall back to weight_in_lbs
     let weight = parseInt(g('weight_use'));
@@ -1101,7 +1112,16 @@ function parseInvoiceSheet(rows){
   if(invRpt._zeroWeight)
     invRpt.warnings.push(`${invRpt._zeroWeight} rows had weight 0 (letters/adjustments) — priced at 1 lb`);
 
-  return {packages, parseReport: invRpt};
+  // Period: only count months that carry meaningful volume (>1% of pkgs) to ignore strays
+  const moKeys=Object.keys(monthBuckets).sort();
+  const sigMonths=moKeys.filter(k=>monthBuckets[k]>=Math.max(2,packages.length*0.01));
+  const nMonths=Math.max(1,sigMonths.length||moKeys.length);
+  const period={months:nMonths,first:moKeys[0]||null,last:moKeys[moKeys.length-1]||null,buckets:monthBuckets};
+  invRpt.period=period;
+  if(nMonths>1)
+    invRpt.warnings.push(`File spans ${nMonths} billing months (${period.first}–${period.last}) — volume multiplier auto-set to 1/${nMonths} so summary figures read per-month`);
+
+  return {packages, parseReport: invRpt, period};
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1186,6 +1206,7 @@ function loadSampleData(){
       total_charge:+(rc+misc).toFixed(2),correction_flag:i===17||i===43});
   }
   state.invoice={name:'Sample Invoice (80 pkgs)',packages:pkgs};
+  document.getElementById('vol-mult').value=1;
   renderRCList(); renderRCCheckboxes(); renderInvStatus();
   toast('Sample data loaded — go to Pricing Engine and click Run');
 }
@@ -1515,6 +1536,7 @@ async function handleInvUpload(input){
       const result=parseInvoiceSheet(best.sheet.rows);
       packages=result.packages;
       invRpt=result.parseReport;
+      var invPeriod=result.period;
       if(invRpt) {
         invRpt.sheetUsed=sheetUsed;
         invRpt.allSheets=sheets.map(s=>({name:s.name,rows:Object.keys(s.rows).length,
@@ -1528,9 +1550,21 @@ async function handleInvUpload(input){
       return;
     }
 
-    state.invoice={name,packages};
+    state.invoice={name,packages,period:typeof invPeriod!=='undefined'?invPeriod:null};
     const corrections=packages.filter(p=>p.correction_flag).length;
     const active=packages.filter(p=>!p.correction_flag);
+
+    // Multi-month file → normalize summary to per-month via volume multiplier
+    let periodNote='';
+    const per=state.invoice.period;
+    if(per&&per.months>1){
+      const m=+(1/per.months).toFixed(4);
+      document.getElementById('vol-mult').value=m;
+      const fmtMo=k=>k?`${k.slice(0,4)}-${k.slice(4)}`:'?';
+      periodNote=`<br><em>📅 File spans <strong>${per.months} billing months</strong> (${fmtMo(per.first)} → ${fmtMo(per.last)}) — volume multiplier set to ${m} so all "monthly" figures are true per-month averages.</em>`;
+    } else {
+      document.getElementById('vol-mult').value=1;
+    }
 
     // Auto-detect fuel % from misc/base ratio
     let fuelDetected=null;
@@ -1547,7 +1581,7 @@ async function handleInvUpload(input){
     }
 
     const fuelNote=fuelDetected?`<br><em>Fuel auto-detected: ~${fuelDetected}% (misc÷base ratio)</em>`:'';
-    setStatus('inv-upload-status',`<div class="alert alert-green">✓ Loaded <strong>${name}</strong> — ${packages.length.toLocaleString()} packages${corrections?` · ${corrections} corrections flagged`:''}${fuelNote}</div>`);
+    setStatus('inv-upload-status',`<div class="alert alert-green">✓ Loaded <strong>${name}</strong> — ${packages.length.toLocaleString()} packages${corrections?` · ${corrections} corrections flagged`:''}${fuelNote}${periodNote}</div>`);
 
     if(invRpt) document.getElementById('inv-parse-report').innerHTML=buildInvParseReport(file.name, invRpt);
 
@@ -1869,7 +1903,15 @@ const fmtPct=n=>n==null?'—':n.toFixed(1)+'%';
 const fmtK=n=>n==null?'—':Math.abs(n)>=1000?'$'+(n/1000).toFixed(1)+'k':fmt$(n);
 
 function updateSummaryUI(s){
-  document.getElementById('st-pkgs').textContent=s.total.toLocaleString();
+  // When mult≠1 (multi-month file), show per-month package volume with file total as tooltip
+  const pkgEl=document.getElementById('st-pkgs');
+  if(s.mult&&Math.abs(s.mult-1)>0.001){
+    pkgEl.textContent=Math.round(s.total*s.mult).toLocaleString()+'/mo';
+    pkgEl.title=`${s.total.toLocaleString()} packages in file × ${s.mult} multiplier`;
+  } else {
+    pkgEl.textContent=s.total.toLocaleString();
+    pkgEl.title='';
+  }
   document.getElementById('st-cust').textContent=fmtK(s.custMonthly);
   document.getElementById('st-sell').textContent=fmtK(s.sellMonthly);
   document.getElementById('st-cost').textContent=fmtK(s.costMonthly);
@@ -2310,7 +2352,7 @@ function exportCSV(type){
 
   } else {
     let d=`DEAL BRIEF — ${account}\n${new Date().toLocaleDateString()}\n\n`;
-    d+=`ACCOUNT: ${account}\nMonthly Packages: ${s.total.toLocaleString()}\nCurrent Monthly: $${s.custMonthly.toFixed(2)}\n\n`;
+    d+=`ACCOUNT: ${account}\nMonthly Packages: ${Math.round(s.total*(s.mult||1)).toLocaleString()}\nCurrent Monthly: $${s.custMonthly.toFixed(2)}\n\n`;
     d+=`ECONOMICS\n`;
     if(o.framing==='monthly'||o.framing==='both'){
       d+=`Customer Current/Mo:  $${s.custMonthly.toFixed(2)}\nProposed Sell/Mo:     $${s.sellMonthly.toFixed(2)}\n`;
