@@ -333,7 +333,7 @@ tr:hover td{background:rgba(91,140,255,.045)}
           <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
             <span class="markup-readout" id="markup-display">5.0%</span>
             <input type="range" id="markup-slider" min="0" max="500" step="0.5" value="5" oninput="onMarkupSlider()" style="flex:1">
-            <input type="number" id="markup-num" value="5" min="0" max="70" step="0.1" style="width:72px" oninput="onMarkupNum()">
+            <input type="number" id="markup-num" value="5" min="0" step="0.1" style="width:72px" oninput="onMarkupNum()">
           </div>
           <div id="summary-stats" class="stat-grid" style="margin-bottom:14px">
             <div class="stat"><div class="stat-label">Packages</div><div class="stat-val" id="st-pkgs">—</div></div>
@@ -345,6 +345,39 @@ tr:hover td{background:rgba(91,140,255,.045)}
             <div class="stat"><div class="stat-label">Margin %</div><div class="stat-val blue" id="st-marginpct">—</div></div>
             <div class="stat"><div class="stat-label">Corrections Out</div><div class="stat-val yellow" id="st-corrections">—</div></div>
           </div>
+
+          <!-- Auto-Optimize -->
+          <details id="opt-panel" style="margin-bottom:14px;border:1px solid rgba(91,140,255,.18);border-radius:10px;padding:0">
+            <summary style="cursor:pointer;font-weight:700;font-size:13px;color:var(--blue);padding:10px 14px;list-style:none;display:flex;align-items:center;gap:8px;user-select:none">
+              <span style="font-size:15px">⚡</span> Auto-Optimize Markup
+              <span class="hint" style="margin:0;font-weight:400;color:var(--muted)">— solve for savings &amp; margin targets automatically</span>
+            </summary>
+            <div style="padding:0 14px 14px">
+              <p class="sub" style="margin:4px 0 10px">Enter one or both targets — the engine solves for the exact markup that hits them, then re-runs the scenario.</p>
+              <div class="two-col" style="gap:10px;margin-bottom:10px">
+                <label class="field">Target Customer Savings/Mo
+                  <span class="hint">How much the customer saves vs their current carrier spend</span>
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <span style="color:var(--muted);font-size:13px;font-weight:700">$</span>
+                    <input type="number" id="opt-savings" min="0" step="100" placeholder="e.g. 2000" style="flex:1">
+                  </div>
+                </label>
+                <label class="field">Target Our Margin/Mo
+                  <span class="hint">Our monthly gross profit (sell minus our carrier cost)</span>
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <span style="color:var(--muted);font-size:13px;font-weight:700">$</span>
+                    <input type="number" id="opt-margin" min="0" step="100" placeholder="e.g. 1500" style="flex:1">
+                  </div>
+                </label>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <button class="btn btn-blue" onclick="runOptimizer()" style="font-size:13px;padding:8px 18px">⚡ Find &amp; Apply</button>
+                <span id="opt-result" style="font-size:12px;color:var(--muted)">Run a scenario first, then set targets above.</span>
+              </div>
+              <div id="opt-detail" style="margin-top:8px;display:none"></div>
+            </div>
+          </details>
+
           <p class="sub" style="margin:0 0 10px">Sell price = cheapest carrier rate × (1 + markup) × (1 + customer fuel%). Compared against their all-in invoice total.
             <span style="color:var(--green)">Green</span> = we beat their all-in price on freight — <span style="color:var(--grey)">grey</span> = we match at cost — <span style="color:var(--red)">red</span> = their rate wins outright.
             <em style="color:var(--faint)">Carrier-side surcharges (residential, DAS, etc.) apply on top of sell and will reduce savings modestly.</em></p>
@@ -1750,6 +1783,106 @@ function onMarkupNum(){
   document.getElementById('markup-slider').value=Math.min(v,500);
   document.getElementById('markup-display').textContent=v.toFixed(1)+'%';
   clearTimeout(_mDebounce);_mDebounce=setTimeout(()=>{if(state.result)runScenario();},500);
+}
+
+// ── AUTO-OPTIMIZER ────────────────────────────────────────────────────────────
+function runOptimizer(){
+  const resultEl=document.getElementById('opt-result');
+  const detailEl=document.getElementById('opt-detail');
+  const show=(msg,html,ok)=>{
+    resultEl.textContent=msg;
+    resultEl.style.color=ok===true?'var(--green)':ok===false?'var(--red)':'var(--muted)';
+    detailEl.innerHTML=html||'';
+    detailEl.style.display=html?'':'none';
+  };
+
+  if(!state.result){show('Run a scenario first.',null,null);return;}
+
+  const tSav=parseFloat(document.getElementById('opt-savings').value)||0;
+  const tMar=parseFloat(document.getElementById('opt-margin').value)||0;
+  if(!tSav&&!tMar){show('Enter at least one target (savings or margin).',null,null);return;}
+
+  const s=state.result.summary;
+  // Only packages that were actually rated
+  const pkgs=state.result.packages.filter(p=>!p.correction_flag&&p.bestRate!=null&&p.bestRate>0);
+  if(!pkgs.length){show('No rated packages to optimize.',null,null);return;}
+
+  const mult=s.mult||1;
+  const cf=s.custFuel;
+  const curM=s.markup;
+
+  // sellTotal_i = bestRate_i × (1+m/100) × (1+cf/100) + accSell_i
+  // Total sell = A × (1+m/100) + B   where:
+  //   A = Σ[bestRate × (1+cf/100)]   ← scales with markup
+  //   B = Σ[accSell]                  ← fixed regardless of markup
+  const A=pkgs.reduce((a,p)=>a+p.bestRate*(1+cf/100),0);
+  const B=pkgs.reduce((a,p)=>a+(p.sellTotal-p.bestRate*(1+curM/100)*(1+cf/100)),0);
+
+  if(A<=0){show('No rated packages found.',null,null);return;}
+
+  const custMo=s.custMonthly;
+  const costMo=s.costMonthly;
+
+  // sellMo(m) = mult × (A × (1+m/100) + B)
+  // Solve: given a target sellMo, find m
+  const solveM=targetSellMo=>(targetSellMo/mult-B)/A*100-100;
+  const sellMo=m=>mult*(A*(1+m/100)+B);
+
+  const mS=tSav?solveM(custMo-tSav):null;   // markup that delivers exact savings target
+  const mM=tMar?solveM(costMo+tMar):null;   // markup that delivers exact margin target
+
+  let bestM,statusMsg,detailHtml,ok=true;
+
+  if(mS!=null&&mM!=null){
+    if(mM<=mS){
+      // Both feasible — use margin floor (lowest markup that meets margin, maximizing savings)
+      bestM=Math.max(0,mM);
+      const acSav=custMo-sellMo(bestM);
+      const acMar=sellMo(bestM)-costMo;
+      statusMsg=`✅ Markup ${bestM.toFixed(1)}% satisfies both targets`;
+      detailHtml=`<div class="alert alert-green" style="margin:0">
+        <strong>Markup applied: ${bestM.toFixed(1)}%</strong><br>
+        Customer saves <strong>${fmt$(acSav)}/mo</strong> (target ${fmt$(tSav)}) &nbsp;✓<br>
+        Our margin <strong>${fmt$(acMar)}/mo</strong> (target ${fmt$(tMar)}) &nbsp;✓</div>`;
+    } else {
+      // Conflict: savings needs lower markup than margin requires
+      // Apply savings-first; show gap
+      bestM=Math.max(0,mS);
+      const acMar=sellMo(bestM)-costMo;
+      const acSavAtMM=custMo-sellMo(Math.max(0,mM));
+      statusMsg=`⚠️ Targets conflict — savings target applied (${bestM.toFixed(1)}%)`;
+      ok=false;
+      detailHtml=`<div class="alert alert-yellow" style="margin:0">
+        <strong>Conflict:</strong> hitting $${fmt$(tSav)} savings requires markup ≤ ${mS.toFixed(1)}%,
+        but $${fmt$(tMar)} margin requires markup ≥ ${mM.toFixed(1)}%.<br><br>
+        <strong>Applied ${bestM.toFixed(1)}% (savings-first):</strong><br>
+        &nbsp;Customer saves <strong>${fmt$(tSav)}/mo</strong> ✓ &nbsp;|&nbsp; Our margin <strong>${fmt$(acMar)}/mo</strong> ✗ (target ${fmt$(tMar)})<br><br>
+        To hit margin target instead, use markup ${mM.toFixed(1)}% — customer would save ${fmt$(acSavAtMM)}/mo.</div>`;
+    }
+  } else if(mS!=null){
+    bestM=Math.max(0,mS);
+    const acMar=sellMo(bestM)-costMo;
+    statusMsg=`✅ Markup ${bestM.toFixed(1)}% — savings target met`;
+    detailHtml=`<div class="alert alert-green" style="margin:0">
+      Customer saves <strong>${fmt$(tSav)}/mo</strong> ✓ &nbsp;|&nbsp; Our margin: <strong>${fmt$(acMar)}/mo</strong></div>`;
+  } else {
+    bestM=Math.max(0,mM);
+    const acSav=custMo-sellMo(bestM);
+    statusMsg=`✅ Markup ${bestM.toFixed(1)}% — margin target met`;
+    detailHtml=`<div class="alert alert-green" style="margin:0">
+      Our margin <strong>${fmt$(tMar)}/mo</strong> ✓ &nbsp;|&nbsp; Customer saves: <strong>${fmt$(acSav)}/mo</strong></div>`;
+  }
+
+  if(mS!=null&&mS<0){show('Savings target exceeds what\'s possible — customer spend is below our sell floor.',null,false);return;}
+  if(mM!=null&&mM<0&&mS==null){show('Margin target achievable at 0% markup — apply manually.',null,null);return;}
+
+  show(statusMsg,detailHtml,ok);
+
+  // Apply markup and re-run scenario
+  document.getElementById('markup-num').value=bestM.toFixed(2);
+  document.getElementById('markup-slider').value=Math.min(bestM,500);
+  document.getElementById('markup-display').textContent=bestM.toFixed(1)+'%';
+  runScenario();
 }
 
 // Grid tab markup slider — kept in lockstep with the engine slider
